@@ -1,0 +1,23 @@
+# Local identities and diagnostics must never enter this repository.
+private/
+private-backups/
+backups/
+logs/
+*.zip
+*.dmg
+*.chunklist
+*.panic
+panic-*.txt
+opencore-*.txt
+SysReport/
+Report.json
+config.plist.*
+config-*.plist
+nvram.plist
+*.key
+*.pem
+.env
+.env.*
+.DS_Store
+._*
+__pycache__/

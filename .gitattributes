@@ -1,0 +1,9 @@
+* -text
+*.md text eol=lf
+*.py text eol=lf
+docs/*.json text eol=lf
+*.efi binary
+*.aml binary
+**/Contents/MacOS/* binary
+EFI/** -text
+EFI/OC/config.plist text eol=lf

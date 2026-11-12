@@ -1,0 +1,111 @@
+{
+  "snapshot_date": "2026-11-12",
+  "model": "HP 250 15.6 inch G10 Notebook PC",
+  "cpu": "Intel Core i5-1334U",
+  "board": "8B34",
+  "bios": "F.26",
+  "graphics_device": "8086:A7A1",
+  "wifi_device": "10EC:B85B",
+  "smbios_model": "MacBookPro16,2",
+  "gop_resolution": "1920x1080",
+  "opencore": "1.0.8",
+  "owner_reported": {
+    "macOS_boot": true,
+    "wifi": true,
+    "graphics_acceleration": false
+  },
+  "identity_removed": true,
+  "identity_must_be_generated_before_use": true,
+  "kexts": [
+    {
+      "bundle": "Lilu.kext",
+      "identifier": "as.vit9696.Lilu",
+      "version": "1.7.3"
+    },
+    {
+      "bundle": "WhateverXe.kext",
+      "identifier": "org.b00t0x.WhateverXe",
+      "version": "0.7.0"
+    },
+    {
+      "bundle": "IOSkywalkFamily.kext",
+      "identifier": "com.apple.iokit.IOSkywalkFamily",
+      "version": "1.0"
+    },
+    {
+      "bundle": "IO80211FamilyLegacy.kext",
+      "identifier": "com.apple.iokit.IO80211FamilyLegacy",
+      "version": "1200.12.2b1"
+    },
+    {
+      "bundle": "AMFIPass.kext",
+      "identifier": "com.dhinakg.AMFIPass",
+      "version": "1.4.1"
+    },
+    {
+      "bundle": "AirPort_RTW89.kext",
+      "identifier": "com.rtw89.driver",
+      "version": "0.5.0"
+    },
+    {
+      "bundle": "AirPort_RTW89.kext/Contents/PlugIns/AirPortRTW89Front.kext",
+      "identifier": "com.rtw89.front",
+      "version": "0.5.0"
+    },
+    {
+      "bundle": "NVMeFix.kext",
+      "identifier": "org.acidanthera.NVMeFix",
+      "version": "1.1.4"
+    },
+    {
+      "bundle": "VirtualSMC.kext",
+      "identifier": "as.vit9696.VirtualSMC",
+      "version": "1.3.9"
+    },
+    {
+      "bundle": "VoodooI2C.kext/Contents/PlugIns/VoodooI2CServices.kext",
+      "identifier": "com.alexandred.VoodooI2CServices",
+      "version": "1"
+    },
+    {
+      "bundle": "VoodooI2C.kext/Contents/PlugIns/VoodooGPIO.kext",
+      "identifier": "org.coolstar.VoodooGPIO",
+      "version": "1.2"
+    },
+    {
+      "bundle": "VoodooI2C.kext",
+      "identifier": "com.alexandred.VoodooI2C",
+      "version": "2.9.1"
+    },
+    {
+      "bundle": "VoodooI2C.kext/Contents/PlugIns/VoodooInput.kext",
+      "identifier": "me.kishorprins.VoodooInput",
+      "version": "1.1.7"
+    },
+    {
+      "bundle": "VoodooI2CHID.kext",
+      "identifier": "com.alexandred.VoodooI2CHID",
+      "version": "1"
+    },
+    {
+      "bundle": "VoodooPS2Controller.kext",
+      "identifier": "as.acidanthera.voodoo.driver.PS2Controller",
+      "version": "2.3.8"
+    },
+    {
+      "bundle": "VoodooPS2Controller.kext/Contents/PlugIns/VoodooPS2Keyboard.kext",
+      "identifier": "as.acidanthera.voodoo.driver.PS2Keyboard",
+      "version": "2.3.8"
+    },
+    {
+      "bundle": "VoodooPS2Controller.kext/Contents/PlugIns/VoodooPS2Mouse.kext",
+      "identifier": "as.acidanthera.voodoo.driver.PS2Mouse",
+      "version": "2.3.8"
+    },
+    {
+      "bundle": "VoodooPS2Controller.kext/Contents/PlugIns/VoodooPS2Trackpad.kext",
+      "identifier": "as.acidanthera.voodoo.driver.PS2Trackpad",
+      "version": "2.3.8"
+    }
+  ]
+}

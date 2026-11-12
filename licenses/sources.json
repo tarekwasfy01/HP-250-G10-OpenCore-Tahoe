@@ -1,0 +1,68 @@
+{
+  "OpenCorePkg": {
+    "repository": "acidanthera/OpenCorePkg",
+    "source": "https://github.com/acidanthera/OpenCorePkg/blob/master/LICENSE.txt",
+    "license": "BSD-3-Clause",
+    "saved": true
+  },
+  "Lilu": {
+    "repository": "acidanthera/Lilu",
+    "source": "https://github.com/acidanthera/Lilu/blob/master/LICENSE.txt",
+    "license": "BSD-3-Clause",
+    "saved": true
+  },
+  "WhateverXe": {
+    "repository": "b00t0x/WhateverXe",
+    "source": "https://github.com/b00t0x/WhateverXe/blob/main/LICENSE.txt",
+    "license": "BSD-3-Clause",
+    "saved": true
+  },
+  "VirtualSMC": {
+    "repository": "acidanthera/VirtualSMC",
+    "source": "https://github.com/acidanthera/VirtualSMC/blob/master/LICENSE.txt",
+    "license": "BSD-3-Clause",
+    "saved": true
+  },
+  "NVMeFix": {
+    "repository": "acidanthera/NVMeFix",
+    "source": "https://github.com/acidanthera/NVMeFix/blob/master/LICENSE.txt",
+    "license": "NOASSERTION",
+    "saved": true
+  },
+  "VoodooI2C": {
+    "repository": "VoodooI2C/VoodooI2C",
+    "source": "https://github.com/VoodooI2C/VoodooI2C/blob/master/LICENSE.txt",
+    "license": "GPL-3.0",
+    "saved": true
+  },
+  "VoodooPS2": {
+    "repository": "acidanthera/VoodooPS2",
+    "source": "https://github.com/acidanthera/VoodooPS2/blob/master/LICENSE.md",
+    "license": "NOASSERTION",
+    "saved": true
+  },
+  "VoodooInput": {
+    "repository": "acidanthera/VoodooInput",
+    "source": "https://github.com/acidanthera/VoodooInput/blob/master/LICENSE.txt",
+    "license": "GPL-2.0",
+    "saved": true
+  },
+  "AirPort_RTW89": {
+    "repository": "FranciumOS-org/AirPort_RTW89",
+    "source": "https://github.com/FranciumOS-org/AirPort_RTW89/blob/main/LICENSE",
+    "license": "NOASSERTION",
+    "saved": true
+  },
+  "OpCore-Simplify": {
+    "repository": "lzhoang2801/OpCore-Simplify",
+    "source": "https://github.com/lzhoang2801/OpCore-Simplify/blob/main/LICENSE",
+    "license": "BSD-3-Clause",
+    "saved": true
+  },
+  "WhateverXe-Graphics": {
+    "repository": "b00t0x/WhateverXe-Graphics",
+    "source": "https://github.com/b00t0x/WhateverXe-Graphics/blob/main/LICENSE.txt",
+    "license": "NOASSERTION",
+    "saved": true
+  }
+}

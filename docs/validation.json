@@ -1,0 +1,14 @@
+{
+  "date": "2026-11-12",
+  "basis": "Current main EFI on the reference HP 250 G10",
+  "owner_reported_macos_boot": true,
+  "owner_reported_wifi": true,
+  "owner_reported_graphics_acceleration": false,
+  "ocvalidate": "OpenCore 1.0.8: no issues",
+  "active_paths_and_ssdt_checksums": "passed",
+  "private_identity_scan": "passed before initial commit",
+  "uefi_binaries": "x86_64 headers checked; unchanged from source",
+  "boot_test_during_export": false,
+  "source_boot_partitions_modified": false,
+  "required_before_use": "Generate your own SMBIOS serial, MLB, UUID and ROM"
+}
