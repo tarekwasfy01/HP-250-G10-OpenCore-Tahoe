@@ -7,3 +7,5 @@ docs/*.json text eol=lf
 **/Contents/MacOS/* binary
 EFI/** -text
 EFI/OC/config.plist text eol=lf
+
+*.pkg binary

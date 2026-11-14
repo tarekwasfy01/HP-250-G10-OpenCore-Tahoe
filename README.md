@@ -144,3 +144,20 @@ System sleep after closing the lid fails to resume reliably with this graphics
 stack. The owner applied a separate macOS display-only workaround that disables
 system sleep; it is not an EFI sleep fix. The laptop stays running while closed.
 This workaround is not installed by copying the public EFI.
+
+## Local system-stack .pkg and public installer tools
+
+A verified **NootedGreen system-stack package builder** is now included under
+[`installer/`](installer/README.md), with license notices, a complete source
+hash manifest, exact module UUID checks, pre-install backups and failure rollback.
+It targets **25G332** and does not modify the EFI.
+
+The public [**HP250 Graphics Installer Tools.pkg**](packages/HP250-Graphics-Installer-Tools-20261114.pkg) installs the builder and documentation
+only. The complete graphics .pkg is generated locally from your existing verified
+files; Apple-origin graphics binaries are not redistributed in that public package.
+The full local package includes TGL graphics/framebuffer, HookCase, the patched
+Metal/shared bundles and the matching shader compiler/LLVM bridge. EFI-only
+battery, audio, Bluetooth and brightness drivers remain in the published EFI.
+
+See the [installer instructions and recovery limits](installer/README.md) before use.
+The confirmed working laptop does not need the graphics package reinstalled now.
