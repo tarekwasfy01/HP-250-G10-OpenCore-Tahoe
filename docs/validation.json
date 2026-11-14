@@ -3,7 +3,7 @@
   "ocvalidate": "OpenCore 1.0.8: no issues",
   "public_identity_scrubbed": true,
   "source": "Exact reconstruction against SHA-256 manifest from successful OCTEST battery/audio/Bluetooth install; current partition recheck required by promotion script",
-  "runtime_report": "Owner confirms Metal acceleration, audio output and battery; microphone fails, Bluetooth discovery works but pairing fails",
+  "runtime_report": "Owner confirms Metal acceleration, audio output, battery reporting and Bluetooth pairing with Samsung Galaxy S21; microphone input remains silent",
   "checks": [
     "public template validator",
     "known private SMBIOS value scan",

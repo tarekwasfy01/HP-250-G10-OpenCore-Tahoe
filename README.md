@@ -21,7 +21,7 @@ video, sleep or external-display workload.
 | Battery percentage | Working, owner confirmed |
 | Internal audio output | Working, owner confirmed; layout 11 in this snapshot |
 | Microphone | Not working |
-| Realtek Bluetooth (USB 0BDA:B85D) | Discovery works; pairing fails |
+| Realtek Bluetooth (USB 0BDA:B85D) | Discovery and pairing with Samsung Galaxy S21 work, owner confirmed |
 | Sleep/wake, camera, external video | Not comprehensively tested |
 
 ## Hardware and custom graphics profile
@@ -61,8 +61,9 @@ system graphics modifications before changing your installation.
 
 The owner confirmed battery reporting and audio output after the 14 November
 OCTEST test. The exported EFI includes that successful installation state.
-Microphone capture still fails. Bluetooth can discover devices but cannot pair;
-this is partial initialization, not working Bluetooth support.
+Microphone capture still fails. Bluetooth discovery and pairing with a Samsung
+Galaxy S21 are now confirmed by the owner. Automatic reconnection, other device
+profiles and sleep/wake behavior have not been qualified.
 
 - **Battery:** SMCBatteryManager 1.3.9 with the existing VirtualSMC 1.3.9,
   plus ECEnabler 1.0.6. Charge percentage works; cycles, temperature and
@@ -75,8 +76,9 @@ this is partial initialization, not working Bluetooth support.
 - **Bluetooth:** RealtekBluetoothFirmware 1.0.2 plus BlueToolFixup 2.7.2.
   The Realtek executable is unchanged; its Info.plist has one additional
   USB matching personality for the measured **0BDA:B85D**. Firmware selection
-  remains based on the actual HCI version. Discovery is confirmed; pairing
-  and Bluetooth audio are not working/qualified. No bluetoothd patch is included.
+  remains based on the actual HCI version. Discovery and pairing with a Samsung Galaxy S21 are confirmed.
+  Bluetooth audio, automatic reconnection and sleep/wake remain unqualified.
+  No bluetoothd patch is included.
 
 The custom NootedGreen binary also contains an opt-in native software-cursor
 trial, enabled by `ngreen,hp-swcursor`. It reports the hardware cursor capability
@@ -85,7 +87,7 @@ the separately tested overlay arrow remains the confirmed workaround. See the
 [cursor-only source diff](docs/nootedgreen-cursor-trial.patch), applied after the
 [HP profile diff](docs/nootedgreen-hp.patch). It changes neither DVMT nor topology.
 
-Replacing an EFI does not fix the microphone or Bluetooth pairing automatically.
+Replacing an EFI alone does not guarantee microphone or Bluetooth behavior on another installation.
 The status table records observed limits rather than promising those features.
 
 ## Identity removed from the public EFI

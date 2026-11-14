@@ -17,7 +17,7 @@
     "battery_reporting": true,
     "microphone": false,
     "bluetooth_scan": true,
-    "bluetooth_pairing": false
+    "bluetooth_pairing": true
   },
   "identity_removed": true,
   "identity_must_be_generated_before_use": true,
@@ -152,5 +152,11 @@
   "os_build": "25G332",
   "bluetooth_usb": "0BDA:B85D",
   "audio_controller": "8086:51CA",
-  "audio_layout_trial": 11
+  "audio_layout_trial": 11,
+  "bluetooth_pairing_test_device": "Samsung Galaxy S21",
+  "bluetooth_unqualified": [
+    "automatic reconnection",
+    "Bluetooth audio and other profiles",
+    "sleep/wake"
+  ]
 }
