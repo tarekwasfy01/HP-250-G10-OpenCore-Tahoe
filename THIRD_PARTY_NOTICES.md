@@ -44,3 +44,5 @@ included components remain as historical attribution.
 - RealtekBluetoothFirmware 1.0.2: https://github.com/thegwchr/RealtekBluetoothFirmware. Local change: one USB matching personality for 0BDA:B85D, following upstream's documented matching procedure; executable and embedded firmware unchanged. Realtek firmware retains its upstream terms.
 - BlueToolFixup 2.7.2: https://github.com/acidanthera/BrcmPatchRAM. Other Broadcom firmware kexts from that archive are not included.
 - Native cursor trial: local narrowly scoped extension to the documented NootedGreen source lineage; see docs/nootedgreen-cursor-trial.patch. The original NootedGreen license remains applicable.
+
+BrightnessKeys 1.0.3: https://github.com/acidanthera/BrightnessKeys, BSD-3-Clause; handles ACPI brightness notifications.

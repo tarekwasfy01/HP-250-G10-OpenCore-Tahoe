@@ -2,8 +2,8 @@
   "date": "2026-11-14",
   "ocvalidate": "OpenCore 1.0.8: no issues",
   "public_identity_scrubbed": true,
-  "source": "Exact reconstruction against SHA-256 manifest from successful OCTEST battery/audio/Bluetooth install; current partition recheck required by promotion script",
-  "runtime_report": "Owner confirms Metal acceleration, audio output, battery reporting and Bluetooth pairing with Samsung Galaxy S21; microphone input remains silent",
+  "source": "Exact SHA-256 reconstruction of successful OCTEST BrightnessKeys install (89 private files); privileged promotion independently rechecks live source",
+  "runtime_report": "Owner confirms Metal, audio output, battery, S21 pairing and F2/F3; microphone silent with layout55; system sleep resume fails; powermetrics observed 4600MHz",
   "checks": [
     "public template validator",
     "known private SMBIOS value scan",

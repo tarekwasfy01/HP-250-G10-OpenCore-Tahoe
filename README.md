@@ -18,8 +18,9 @@ video, sleep or external-display workload.
 | Hardware mouse cursor | Corrupted; software arrow workaround currently used |
 | Realtek RTL8852BE Wi-Fi | Owner reports working |
 | Keyboard / I2C touchpad | Drivers included; not comprehensively qualified |
+| F2/F3 brightness keys | Working after BrightnessKeys 1.0.3, owner confirmed |
 | Battery percentage | Working, owner confirmed |
-| Internal audio output | Working, owner confirmed; layout 11 in this snapshot |
+| Internal audio output | Working, owner confirmed; layout 55 in this snapshot |
 | Microphone | Not working |
 | Realtek Bluetooth (USB 0BDA:B85D) | Discovery and pairing with Samsung Galaxy S21 work, owner confirmed |
 | Sleep/wake, camera, external video | Not comprehensively tested |
@@ -57,6 +58,12 @@ payloads. Keep a working recovery boot path and a backup of your EFI and any
 system graphics modifications before changing your installation.
 
 
+## Brightness keys
+
+The display brightness slider already worked. Adding BrightnessKeys 1.0.3
+made F2/F3 work on the reference HP, as confirmed by the owner. It is loaded
+after Lilu and uses the retained HP ACPI/XOSI configuration.
+
 ## Battery, audio and Bluetooth update
 
 The owner confirmed battery reporting and audio output after the 14 November
@@ -70,8 +77,9 @@ profiles and sleep/wake behavior have not been qualified.
   sleep/wake charging behavior have not been qualified.
 - **Audio:** AppleALC 1.9.8 plus SimpleHDA 1.0.1, which restores the missing
   AppleHDA stack on Tahoe through EFI injection. `DisableLinkeditJettison` is
-  enabled. Layout 11 is set on `PciRoot(0x0)/Pci(0x1F,0x3)`; the controller is
-  Intel 8086:51CA. The codec is suspected ALC236, not independently dumped.
+  enabled. Layout 55 is currently set on `PciRoot(0x0)/Pci(0x1F,0x3)`; the controller is
+  Intel 8086:51CA. The codec is confirmed as ALC236 (10EC:0236, revision 0x100002) by IORegistry.
+  Layout 55 is a microphone-routing trial; microphone input remains silent.
   The optional SimpleHDA HAL package was not installed. No VoodooHDA is loaded.
 - **Bluetooth:** RealtekBluetoothFirmware 1.0.2 plus BlueToolFixup 2.7.2.
   The Realtek executable is unchanged; its Info.plist has one additional
@@ -128,3 +136,11 @@ restrictions: read it before redistributing or using commercially.
 
 This project is an independent hardware-specific reference and is not affiliated
 with Apple, HP, Intel or the upstream driver authors.
+
+## CPU and sleep observations
+
+`powermetrics` observed a 4600-MHz P-state: CPU Turbo Boost is active.
+System sleep after closing the lid fails to resume reliably with this graphics
+stack. The owner applied a separate macOS display-only workaround that disables
+system sleep; it is not an EFI sleep fix. The laptop stays running while closed.
+This workaround is not installed by copying the public EFI.

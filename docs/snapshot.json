@@ -17,7 +17,10 @@
     "battery_reporting": true,
     "microphone": false,
     "bluetooth_scan": true,
-    "bluetooth_pairing": true
+    "bluetooth_pairing": true,
+    "brightness_keys_f2_f3": true,
+    "cpu_turbo": true,
+    "system_sleep_resume": false
   },
   "identity_removed": true,
   "identity_must_be_generated_before_use": true,
@@ -26,6 +29,11 @@
       "bundle": "Lilu.kext",
       "identifier": "as.vit9696.Lilu",
       "version": "1.7.3"
+    },
+    {
+      "bundle": "BrightnessKeys.kext",
+      "identifier": "as.acidanthera.BrightnessKeys",
+      "version": "1.0.3"
     },
     {
       "bundle": "IOSkywalkFamily.kext",
@@ -152,11 +160,12 @@
   "os_build": "25G332",
   "bluetooth_usb": "0BDA:B85D",
   "audio_controller": "8086:51CA",
-  "audio_layout_trial": 11,
+  "audio_layout_trial": 55,
   "bluetooth_pairing_test_device": "Samsung Galaxy S21",
   "bluetooth_unqualified": [
     "automatic reconnection",
     "Bluetooth audio and other profiles",
     "sleep/wake"
-  ]
+  ],
+  "audio_codec": "10EC:0236 revision 0x100002"
 }
