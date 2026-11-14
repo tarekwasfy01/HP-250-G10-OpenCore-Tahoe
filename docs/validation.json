@@ -1,14 +1,12 @@
 {
-  "date": "2026-11-12",
-  "basis": "Current main EFI on the reference HP 250 G10",
-  "owner_reported_macos_boot": true,
-  "owner_reported_wifi": true,
-  "owner_reported_graphics_acceleration": false,
+  "date": "2026-11-14",
   "ocvalidate": "OpenCore 1.0.8: no issues",
-  "active_paths_and_ssdt_checksums": "passed",
-  "private_identity_scan": "passed before initial commit",
-  "uefi_binaries": "x86_64 headers checked; unchanged from source",
-  "boot_test_during_export": false,
-  "source_boot_partitions_modified": false,
-  "required_before_use": "Generate your own SMBIOS serial, MLB, UUID and ROM"
+  "public_identity_scrubbed": true,
+  "source": "live mounted OCTEST/EFI",
+  "runtime_report": "Metal Supported; 1536 MB; hardware cursor corrupted",
+  "checks": [
+    "public template validator",
+    "known source SMBIOS value scan",
+    "source/TAHOE-BOOT file hash equality"
+  ]
 }

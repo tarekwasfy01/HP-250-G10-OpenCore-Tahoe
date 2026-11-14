@@ -21,3 +21,15 @@ This repository preserves the active components of one HP 250 G10 setup. It does
 Upstream license texts are provided in `licenses/` where available. Existing notices in bundled files remain applicable. Upstream source links and the embedded versions in `docs/snapshot.json` identify the corresponding projects; this repository is not their official distribution channel.
 
 No macOS installer, recovery image, TGL system graphics package or full firmware DSDT is included. Apple-origin components and Realtek firmware remain subject to their respective rights and terms; the original documentation license does not grant additional rights to them.
+
+## NootedGreen HP profile (14 November 2026)
+
+The current snapshot replaces WhateverXe with a custom NootedGreen build and
+WhateverGreen. NootedGreen source lineage: [dssoftx/Hackintosh-X1Carbon-G11-IrisXe-Tahoe](https://github.com/dssoftx/Hackintosh-X1Carbon-G11-IrisXe-Tahoe),
+reviewed revisions in `docs/nootedgreen-build.json`; local changes in
+`docs/nootedgreen-hp.patch`. Its upstream license is reproduced verbatim in
+`licenses/NootedGreen.txt`. HookCase's MIT license is in `licenses/HookCase.txt`;
+HookCase and OS-specific system graphics payloads are not included in this EFI.
+WhateverGreen upstream: https://github.com/acidanthera/WhateverGreen;
+license in `licenses/WhateverGreen.txt`. Existing license files for previously
+included components remain as historical attribution.

@@ -1,0 +1,794 @@
+diff --git a/macos/src/libxedrv.m b/macos/src/libxedrv.m
+index 6e04a32..a06805e 100644
+--- a/macos/src/libxedrv.m
++++ b/macos/src/libxedrv.m
+@@ -1,4 +1,4 @@
+-// libxedrv v19 — injetado no driver Metal TGL 16.0.32 (LC_LOAD_DYLIB). Adapta o driver (era Big Sur) ao Metal do Tahoe 25G241. v16: escritas em buffer pelo caminho 3D (ver "v16"). v17: stencil fora do bloco de 64 KB de outro render target (ver "v17"). v19: mipmaps das texturas zero-copy (ver "v19").
++// libxedrv v21 — injetado no driver Metal TGL 16.0.32 (LC_LOAD_DYLIB). Adapta o driver (era Big Sur) ao Metal do Tahoe 25G241. v16: escritas em buffer pelo caminho 3D (ver "v16"). v17: stencil fora do bloco de 64 KB de outro render target (ver "v17"). v19: mipmaps das texturas zero-copy (ver "v19"). v20: o registrador de crash não toma o lugar dos sinais que o programa já trata (JVM, #20). v21: compute em ordem com render/blit e barreira de compute que funciona em encoder serial (ver "v21").
+ // Mudanças em relação à v7 (xe/build/llvm-bridge/xedrv.m), comparando com o adaptador do IntelIGPU-Tahoe (25G83) e com o layout medido:
+ //  1. _descriptorPrivate: o deslocamento de 0x10 começa em 0xa8 (o driver antigo também tem shaderValidation em 0xa0; a v7 punha
+ //     textureWriteRoundingMode ali). Layout antigo lido da codificação de tipo do próprio driver:
+@@ -285,12 +285,20 @@ static void crash_handler(int sig, siginfo_t* si, void* uc_) {
+   signal(sig, SIG_DFL);
+   if (sig == SIGABRT) raise(sig);   // nos outros, retornar refaz a instrução e o processo morre com o sinal original
+ }
++// Only for signals the host process does not handle itself: runtimes such as the JVM use SIGSEGV/SIGBUS on purpose
++// (safepoint polls, implicit null checks) and install their handlers before AppKit loads this driver. Replacing
++// them turned those expected faults into crashes (IntelliJ "Bus error: 10", issue #20).
+ static void install_crash(void) {
+   struct sigaction sa; memset(&sa, 0, sizeof sa);
+   sa.sa_sigaction = crash_handler; sa.sa_flags = SA_SIGINFO | SA_RESETHAND;
+   sigemptyset(&sa.sa_mask);
+   int sigs[] = {SIGSEGV, SIGBUS, SIGILL, SIGABRT};
+-  for (unsigned i = 0; i < 4; i++) sigaction(sigs[i], &sa, NULL);
++  for (unsigned i = 0; i < 4; i++) {
++    struct sigaction old;
++    if (sigaction(sigs[i], NULL, &old) != 0) continue;
++    if ((old.sa_flags & SA_SIGINFO) || old.sa_handler != SIG_DFL) continue;   // the process has its own handler: leave it
++    sigaction(sigs[i], &sa, NULL);
++  }
+ }
+ 
+ // v12 (19/10): sem compressão de textura. O hang do RCS era um render-target FAST CLEAR (3DSTATE_PS com
+@@ -658,15 +666,202 @@ static void install_fillfix(void) {
+   if (!g_fill) g_fill = (IMP)1;   // sem o método: não tentar de novo
+ }
+ 
++// v21 (28/10): COMPUTE FORA DE ORDEM COM RENDER/BLIT. No driver 16.0.32 o trabalho de compute vai para outro motor e
++// não espera o render/blit anterior (nem o render/blit espera o compute), no mesmo command buffer E entre command buffers
++// seguidos da mesma fila; updateFence/waitForFence e MTLEvent não resolvem. Medido em ~/xe/build/edpfull/mipblit/order
++// (render pesado -> compute lê dados velhos 6/6; compute escreve -> render/blit no mesmo CB lê dados velhos 6/6; com
++// CB separado 1-5/6). Um par encodeSignalEvent/encodeWaitForEvent de MTLSharedEvent entre os encoders serializa os
++// motores (0 falhas em 216 casos, também no início do CB seguinte).
++// Correção (parte A): ao criar um encoder cuja classe (compute x render/blit) difere da do encoder anterior do mesmo
++// command buffer (ou, no primeiro encoder, do último encoder da fila), insere signal+wait de um MTLSharedEvent do próprio
++// command buffer (de um pool por device, devolvido quando o CB termina). XE_COMPUTE_NATIVO=1 desliga a parte A.
++@interface XeEventoV21 : NSObject { @public id<MTLSharedEvent> ev; uint64_t v; } @end
++@implementation XeEventoV21
++- (void)dealloc { [ev release]; [super dealloc]; }
++@end
++@interface XeCBV21 : NSObject { @public int ultima; XeEventoV21* e; } @end
++@implementation XeCBV21
++- (void)dealloc { [e release]; [super dealloc]; }
++@end
++@interface XeFilaV21 : NSObject { @public volatile int ultima; } @end
++@implementation XeFilaV21
++@end
++static IMP g_ce, g_ce_dt, g_re, g_pre, g_be; static long g_ord_n; static int g_ord_off = -1;
++static const void* kXeCB21 = &kXeCB21, *kXeFila21 = &kXeFila21, *kXePool21 = &kXePool21;
++static pthread_mutex_t g_ordm = PTHREAD_MUTEX_INITIALIZER;
++static XeEventoV21* xe_ev_get(id<MTLDevice> dev) {
++  XeEventoV21* x = nil;
++  pthread_mutex_lock(&g_ordm);
++  NSMutableArray* pool = objc_getAssociatedObject(dev, kXePool21);
++  if (!pool) { pool = [NSMutableArray array]; objc_setAssociatedObject(dev, kXePool21, pool, OBJC_ASSOCIATION_RETAIN); }
++  if (pool.count) { x = [[pool lastObject] retain]; [pool removeLastObject]; }
++  pthread_mutex_unlock(&g_ordm);
++  if (!x) { x = [XeEventoV21 new]; x->ev = [dev newSharedEvent]; if (!x->ev) { [x release]; return nil; } }
++  return x;   // +1
++}
++static void xe_ev_put(id<MTLDevice> dev, XeEventoV21* x) {
++  pthread_mutex_lock(&g_ordm);
++  NSMutableArray* pool = objc_getAssociatedObject(dev, kXePool21);
++  if (pool && pool.count < 16) [pool addObject:x];
++  pthread_mutex_unlock(&g_ordm);
++}
++// classe: 0 = render/blit (motor 3D), 1 = compute
++static void xe_ordem(id cb, int classe) {
++  if (g_ord_off) return;
++  XeCBV21* st = objc_getAssociatedObject(cb, kXeCB21);
++  if (!st) { st = [XeCBV21 new]; st->ultima = -1; objc_setAssociatedObject(cb, kXeCB21, st, OBJC_ASSOCIATION_RETAIN); [st release]; }
++  id<MTLCommandQueue> q = [cb commandQueue];
++  XeFilaV21* fq = q ? objc_getAssociatedObject(q, kXeFila21) : nil;
++  if (q && !fq) { fq = [XeFilaV21 new]; fq->ultima = -1; objc_setAssociatedObject(q, kXeFila21, fq, OBJC_ASSOCIATION_RETAIN); [fq release]; }
++  int ant = st->ultima >= 0 ? st->ultima : fq ? fq->ultima : -1;
++  st->ultima = classe; if (fq) fq->ultima = classe;
++  if (ant < 0 || ant == classe) return;
++  id<MTLDevice> dev = [cb device];
++  if (!st->e) {
++    st->e = xe_ev_get(dev); if (!st->e) return;
++    XeEventoV21* x = st->e;
++    [cb addCompletedHandler:^(id<MTLCommandBuffer> c) { xe_ev_put(dev, x); }];
++  }
++  st->e->v++;
++  [cb encodeSignalEvent:st->e->ev value:st->e->v];
++  [cb encodeWaitForEvent:st->e->ev value:st->e->v];
++  long n = __sync_add_and_fetch(&g_ord_n, 1);
++  if (n <= 4 || (n & (n - 1)) == 0) LOG("ORDEM %s -> %s: barreira por MTLSharedEvent no command buffer (n=%ld)", ant ? "compute" : "render/blit",
++      classe ? "compute" : "render/blit", n);
++}
++// v21 (parte B): BARREIRA DE COMPUTE INEFICAZ EM ENCODER SERIAL. No driver 16.0.32 o encoder serial (o padrão) ignora
++// memoryBarrierWithScope:/WithResources: (ChalContext::ChalAddMemoryBarrier, driver+0x32d20, só age com
++// isConcurrentDispatch) e ainda avisa o Metal do Tahoe, que zera o rastreamento de hazards -> o dispatch seguinte lê
++// dados velhos (mipblit/cc: 2/30). Com recursos untracked (heaps do MPS/Core Image) o flush que o encoder serial põe
++// depois de cada dispatch não basta (mipblit/ccheap: 3/30; MPSImageGaussianBlur errado ~1/150, CIGaussianBlur na GPU
++// diferente do software ~13/90). No modo concorrente a barreira vira PIPE_CONTROL antes do dispatch e funciona (0/30).
++// Correção: todo encoder de compute serial nasce concorrente e recebe uma barreira do próprio driver antes de cada
++// dispatch a partir do segundo; dispatchType continua respondendo "serial". XE_BARREIRA_NATIVA=1 desliga a parte B.
++@interface XeSerialV21 : NSObject { @public long n; } @end
++@implementation XeSerialV21
++@end
++static IMP g_dt_q, g_disp_t, g_disp_tg, g_disp_ind, g_mb_scope; static int g_bar_off = -1; static long g_bar_n;
++static const void* kXeSerial21 = &kXeSerial21;
++static id xe_serial_emulado(id cb) {
++  id e = ((id(*)(id, SEL, NSUInteger))g_ce_dt)(cb, sel_registerName("computeCommandEncoderWithDispatchType:"), MTLDispatchTypeConcurrent);
++  if (e) { XeSerialV21* x = [XeSerialV21 new]; objc_setAssociatedObject(e, kXeSerial21, x, OBJC_ASSOCIATION_RETAIN); [x release]; }
++  return e;
++}
++static void xe_antes_dispatch(id e) {
++  XeSerialV21* x = objc_getAssociatedObject(e, kXeSerial21);
++  if (!x || x->n++ == 0) return;
++  ((void(*)(id, SEL, NSUInteger))g_mb_scope)(e, sel_registerName("memoryBarrierWithScope:"), MTLBarrierScopeBuffers | MTLBarrierScopeTextures);
++  long k = __sync_add_and_fetch(&g_bar_n, 1);
++  if (k <= 2 || (k & (k - 1)) == 0) LOG("BARREIRA serial emulada antes do dispatch %ld do encoder (n=%ld)", x->n, k);
++}
++static NSUInteger w_dt_q(id s, SEL c) { return objc_getAssociatedObject(s, kXeSerial21) ? MTLDispatchTypeSerial : ((NSUInteger(*)(id, SEL))g_dt_q)(s, c); }
++static void w_disp_t(id s, SEL c, MTLSize a, MTLSize b) { xe_antes_dispatch(s); ((void(*)(id, SEL, MTLSize, MTLSize))g_disp_t)(s, c, a, b); }
++static void w_disp_tg(id s, SEL c, MTLSize a, MTLSize b) { xe_antes_dispatch(s); ((void(*)(id, SEL, MTLSize, MTLSize))g_disp_tg)(s, c, a, b); }
++static void w_disp_ind(id s, SEL c, id buf, NSUInteger off, MTLSize b) { xe_antes_dispatch(s); ((void(*)(id, SEL, id, NSUInteger, MTLSize))g_disp_ind)(s, c, buf, off, b); }
++static id w_ce(id s, SEL c) { xe_ordem(s, 1); if (!g_bar_off) return xe_serial_emulado(s); return ((id(*)(id, SEL))g_ce)(s, c); }
++static id w_ce_dt(id s, SEL c, NSUInteger t) {
++  xe_ordem(s, 1);
++  if (!g_bar_off && t == MTLDispatchTypeSerial) return xe_serial_emulado(s);
++  return ((id(*)(id, SEL, NSUInteger))g_ce_dt)(s, c, t); }
++static id w_re(id s, SEL c, id d) { xe_ordem(s, 0); return ((id(*)(id, SEL, id))g_re)(s, c, d); }
++static id w_pre(id s, SEL c, id d) { xe_ordem(s, 0); return ((id(*)(id, SEL, id))g_pre)(s, c, d); }
++static id w_be(id s, SEL c) { xe_ordem(s, 0); return ((id(*)(id, SEL))g_be)(s, c); }
++static void install_ordem(void) {
++  if (g_ord_off < 0) g_ord_off = getenv("XE_COMPUTE_NATIVO") != NULL;
++  if (g_bar_off < 0) g_bar_off = getenv("XE_BARREIRA_NATIVA") != NULL;
++  if (g_ord_off && g_bar_off) { LOG("compute: ordem e barreira nativas (XE_COMPUTE_NATIVO, XE_BARREIRA_NATIVA)"); g_ce = (IMP)1; return; }
++  Class k = objc_getClass("MTLIGAccelCommandBuffer"), ce = objc_getClass("MTLIGAccelComputeCommandEncoder");
++  if (!k || !ce) return;
++  static int done; if (done) return; done = 1;
++  if (!g_bar_off) {   // parte B: precisa do memoryBarrierWithScope: original e de todos os dispatches
++    Method mb = class_getInstanceMethod(ce, sel_registerName("memoryBarrierWithScope:"));
++    g_mb_scope = mb ? method_getImplementation(mb) : NULL;
++    if (g_mb_scope) {
++      g_dt_q = troca(ce, "dispatchType", (IMP)w_dt_q);
++      g_disp_t = troca(ce, "dispatchThreads:threadsPerThreadgroup:", (IMP)w_disp_t);
++      g_disp_tg = troca(ce, "dispatchThreadgroups:threadsPerThreadgroup:", (IMP)w_disp_tg);
++      g_disp_ind = troca(ce, "dispatchThreadgroupsWithIndirectBuffer:indirectBufferOffset:threadsPerThreadgroup:", (IMP)w_disp_ind);
++    }
++    if (!g_mb_scope || !g_dt_q || !g_disp_t || !g_disp_tg || !g_disp_ind) { LOG("barreira serial: métodos faltando, parte B desligada"); g_bar_off = 1; }
++  }
++  g_ce_dt = troca(k, "computeCommandEncoderWithDispatchType:", (IMP)w_ce_dt);
++  if (!g_ce_dt) g_bar_off = 1;   // sem o criador com tipo não há como nascer concorrente
++  g_ce = troca(k, "computeCommandEncoder", (IMP)w_ce);
++  if (!g_ord_off) {
++    g_re = troca(k, "renderCommandEncoderWithDescriptor:", (IMP)w_re);
++    g_pre = troca(k, "parallelRenderCommandEncoderWithDescriptor:", (IMP)w_pre);
++    g_be = troca(k, "blitCommandEncoder", (IMP)w_be);
++    if (!g_ce || !g_ce_dt || !g_re || !g_be) LOG("ordem compute/render: métodos faltando (ce=%d cedt=%d re=%d be=%d)", !!g_ce, !!g_ce_dt, !!g_re, !!g_be);
++  }
++  LOG("compute: ordem com render/blit=%s, barreira serial emulada=%s (ce=%d cedt=%d re=%d pre=%d be=%d)", g_ord_off ? "nativa" : "ligada",
++      g_bar_off ? "nativa" : "ligada", !!g_ce, !!g_ce_dt, !!g_re, !!g_pre, !!g_be);
++  if (!g_ce) g_ce = (IMP)1;   // sem o método: não tentar de novo
++}
++
++// v23 (29/10): RETÂNGULOS NO DESFOQUE DO WINDOWSERVER. Nas atualizações parciais do fundo desfocado (blur de janela,
++// backdrop-filter de WebKit, NSVisualEffectView), o CoreAnimation monta uma cópia do fundo atrás da janela (textura
++// não-IOSurface, loadAction=Load) e pinta faixas com o pipeline "PBGRAXb_Xhf" que saem (0,0,0,0) neste driver; o
++// desfoque de 27 amostras espalha essas faixas e aparecem retângulos com desfoque diferente em volta do hover.
++// Medido no laboratório (v22, flag X): 35/24 quadros com glitch em 10 s -> 0/2 ao pular esses desenhos (a faixa fica com
++// o conteúdo anterior, que é o fundo certo). Só no WindowServer. XE_XHF_NATIVO=1 desliga.
++static IMP g_xf_re, g_xf_ps, g_xf_di; static volatile int g_xf_off;
++static const void* kXfEnc = &kXfEnc;
++static id w_xf_re(id s, SEL c, MTLRenderPassDescriptor* d) {
++  id enc = ((id(*)(id, SEL, id))g_xf_re)(s, c, d);
++  MTLRenderPassColorAttachmentDescriptor* a = d.colorAttachments[0];
++  if (enc && !g_xf_off && a.texture && !a.texture.iosurface && a.loadAction == MTLLoadActionLoad) objc_setAssociatedObject(enc, kXfEnc, @1, OBJC_ASSOCIATION_RETAIN);
++  return enc;
++}
++static void w_xf_ps(id s, SEL c, id<MTLRenderPipelineState> p) {
++  if (!g_xf_off && objc_getAssociatedObject(s, kXfEnc)) objc_setAssociatedObject(s, kXfEnc, [p.label isEqualToString:@"com.apple.coreanimation.PBGRAXb_Xhf"] ? @2 : @1, OBJC_ASSOCIATION_RETAIN);
++  ((void(*)(id, SEL, id))g_xf_ps)(s, c, p);
++}
++static void w_xf_di(id s, SEL c, MTLPrimitiveType t, NSUInteger n, MTLIndexType it, id b, NSUInteger off) {
++  NSNumber* m = g_xf_off ? nil : objc_getAssociatedObject(s, kXfEnc);
++  if (m && m.intValue == 2) { static long k; if (++k <= 2 || !(k & (k - 1))) LOG("v23: faixa Xhf da cópia do fundo pulada (n=%ld)", k); return; }
++  ((void(*)(id, SEL, MTLPrimitiveType, NSUInteger, MTLIndexType, id, NSUInteger))g_xf_di)(s, c, t, n, it, b, off);
++}
++static void install_xhf(void) {
++  static int done; if (done || strcmp(getprogname(), "WindowServer") || getenv("XE_XHF_NATIVO")) return;
++  Class cb = objc_getClass("MTLIGAccelCommandBuffer"), re = objc_getClass("MTLIGAccelRenderCommandEncoder");
++  if (!cb || !re) return;
++  done = 1;
++  g_xf_re = troca(cb, "renderCommandEncoderWithDescriptor:", (IMP)w_xf_re);
++  g_xf_ps = troca(re, "setRenderPipelineState:", (IMP)w_xf_ps);
++  g_xf_di = troca(re, "drawIndexedPrimitives:indexCount:indexType:indexBuffer:indexBufferOffset:", (IMP)w_xf_di);
++  LOG("v23: correção do desfoque instalada (re=%d ps=%d di=%d)", !!g_xf_re, !!g_xf_ps, !!g_xf_di);
++}
++
++// v24 (29/10): CHAVES AO VIVO para medir custo sem reiniciar. /private/var/tmp/xedrv.off (lido 1x/s em cada processo):
++// 'o' = sem ordem compute/render (v21 A), 'b' = sem barreira serial emulada (v21 B, vale para encoders novos),
++// 'x' = sem a correção do desfoque (v23). Arquivo ausente = tudo ligado. As variáveis de ambiente continuam valendo.
++static int g_env_ord, g_env_bar;
++static void install_chaves(void) {
++  static int done; if (done) return; done = 1;
++  g_env_ord = g_ord_off > 0; g_env_bar = g_bar_off > 0;
++  dispatch_source_t t = dispatch_source_create(DISPATCH_SOURCE_TYPE_TIMER, 0, 0, dispatch_get_global_queue(QOS_CLASS_UTILITY, 0));
++  dispatch_source_set_timer(t, dispatch_time(DISPATCH_TIME_NOW, NSEC_PER_SEC), NSEC_PER_SEC, NSEC_PER_SEC / 4);
++  dispatch_source_set_event_handler(t, ^{
++    char b[16] = {0}; int fd = open("/private/var/tmp/xedrv.off", O_RDONLY);
++    if (fd >= 0) { read(fd, b, sizeof b - 1); close(fd); }
++    int o = g_env_ord || strchr(b, 'o') != NULL, ba = g_env_bar || strchr(b, 'b') != NULL, x = strchr(b, 'x') != NULL;
++    if (g_ce != (IMP)1 && (o != g_ord_off || ba != g_bar_off)) { LOG("v24: ordem compute %s, barreira serial %s", o ? "DESLIGADA" : "ligada", ba ? "DESLIGADA" : "ligada"); g_ord_off = o; g_bar_off = ba; }
++    if (x != g_xf_off) { if (g_xf_re) LOG("v24: correção do desfoque %s", x ? "DESLIGADA" : "ligada"); g_xf_off = x; }
++  });
++  dispatch_resume(t);
++}
++
+ // fallback: só se algo não existia no constructor (não deveria acontecer: o Metal é carregado antes do driver)
+ static void* late(void* a) {
+   int e = 0, p = 0, r = 0;
+-  for (int t = 0; t < 20000 && !(e && p && r && g_tex_dev && g_fill); t++) {
++  for (int t = 0; t < 20000 && !(e && p && r && g_tex_dev && g_fill && g_ce); t++) {
+     if (!e) e = install_entries(); if (!p) p = install_pd(); if (!r) r = install_rhm();
+     if (!g_tex_dev && objc_getClass("MTLIGAccelDevice")) install_nocomp();
+     if (!g_nc3 && objc_getClass("MTLIOAccelDevice")) install_nocopyfix();
+     if (!g_fill && objc_getClass("MTLIGAccelBlitCommandEncoder")) install_fillfix();
+-    if (!(e && p && r && g_tex_dev && g_fill)) usleep(500);
++    if (!g_ce && objc_getClass("MTLIGAccelCommandBuffer")) install_ordem();
++    if (!g_xf_re) install_xhf();
++    if (!(e && p && r && g_tex_dev && g_fill && g_ce)) usleep(500);
+   }
+   LOG("instalação tardia: entries=%d pd=%d rhm=%d", e, p, r);
+   return NULL;
+@@ -680,7 +875,10 @@ static void install_fillfix(void) {
+   install_pipelog();
+   install_nocopyfix();
+   install_fillfix();
++  install_ordem();
++  install_xhf();
++  install_chaves();
+   int e = install_entries(), p = install_pd(), r = install_rhm();
+   LOG("carregada em %s[%d]: entries=%d pd=%d rhm=%d layout=%d lab=%d", getprogname(), getpid(), e, p, r, g_layout_ok, access(LAB_FLAG, F_OK) == 0);
+-  if (!(e && p && r && g_tex_dev && g_fill)) { pthread_t th; pthread_create(&th, NULL, late, NULL); pthread_detach(th); }
++  if (!(e && p && r && g_tex_dev && g_fill && g_ce)) { pthread_t th; pthread_create(&th, NULL, late, NULL); pthread_detach(th); }
+ }
+diff --git a/src/NootedGreen/kern_gen11.cpp b/src/NootedGreen/kern_gen11.cpp
+old mode 100755
+new mode 100644
+index e3b34c0..f53aa66
+--- a/src/NootedGreen/kern_gen11.cpp
++++ b/src/NootedGreen/kern_gen11.cpp
+@@ -6,6 +6,7 @@ static bool xeFixEnabled();  // xe/xefix, definido junto do FastWriteRegister32
+ #include <Headers/kern_api.hpp>
+ #include "kern_genx.hpp"
+ #include "kern_green.hpp"
++#include "kern_hp_a7a1.hpp"
+ #include "IntelDPLinkTraining.hpp"
+ #include <IOKit/IOBufferMemoryDescriptor.h>
+ #include <IOKit/IOCatalogue.h>
+@@ -61,13 +62,107 @@ static void xeTopoArgs() {
+ 	if (gTopoParsed) return;
+ 	gTopoParsed = true;
+ 	uint32_t eu = 0, l3 = 0;
++    if (NGreen::callback && NGreen::callback->getHPA7A1Profile()) {
++        gTopoSs = HPA7A1::NativeSubslices;
++        gTopoL3 = HPA7A1::L3Banks;
++        SYSLOG("ngreen", "HP A7A1: qualified 80 EU / 10 native subslices / 6 L3 banks");
++        return;
++    }
+ 	if (PE_parse_boot_argn("ngreen-eu", &eu, sizeof(eu)) && (eu == 48 || eu == 64 || eu == 80 || eu == 96)) gTopoSs = eu / 8;
+ 	if (PE_parse_boot_argn("ngreen-l3", &l3, sizeof(l3)) && l3 >= 2 && l3 <= 16 && !(l3 & 1)) gTopoL3 = l3;
+ }
+ static void *volatile gTopoAcc = nullptr;
++static volatile uint32_t gRc2Pre = 0xFFFFFFFFU, gRc2Post = 0xFFFFFFFFU, gRc2N = 0;   // xe/rowchk: 0xe4f4 before/after (last start)
++// xe/auxbl (#15): backlight over eDP AUX for panels that ignore the PWM pin (OLED). Off by default.
++//   ngreenauxbl=1  VESA eDP (DPCD 0x720-0x723, like Linux drm_edp_backlight); =2 same and PWM duty pinned at 100% (test)
++//   ngreenauxbl=3  Intel HDR TCON (Linux intel_dp_aux_hdr_*: 0x344 bit 4 AUX enable, nits at 0x354); =4 same + PWM pinned
++//   ngreenauxnits=N  panel maximum in nits for 3/4 (default 400, minimum sent 2)
++// Apple's duty write (BLC_PWM_PCH_CTL2) sets the level; the AUX writes run on a thread call with Apple's own
++// AppleIntelPort::readAUX/writeAUX. Arms only if the panel advertises the interface: VESA needs 0x701 bit 2 and 0x702
++// bit 1, Intel HDR needs 0x341 bit 4. ioreg on IntelAccelerator: xe-dpcd700-0..3 / xe-dpcd340 (caps, little-endian),
++// xe-auxbl-n (writes), -ret, -lvl (last level or nits), -rb (read back).
++static volatile uint32_t gXeDpcd700[4] = {0, 0, 0, 0}, gXeDpcd700Ret = 0xFFFFFFFFU, gXeDpcd340 = 0, gXeDpcd340Ret = 0xFFFFFFFFU;
++static void *volatile gXeAuxBlPort = nullptr;
++static mach_vm_address_t gXeAuxBlWr = 0, gXeAuxBlRd = 0;
++static thread_call_t gXeAuxBlTc = nullptr;
++static volatile uint32_t gXeAuxBlLevel = 0, gXeAuxBlN = 0, gXeAuxBlRet = 0xFFFFFFFFU, gXeAuxBlRb = 0, gXeAuxBlDone = 0;
++static int xeAuxBlMode() {
++	static int m = -1;
++	if (m < 0) { int v = 0; m = PE_parse_boot_argn("ngreenauxbl", &v, sizeof(v)) && v > 0 && v < 5 ? v : 0; }
++	return m;
++}
++static bool xeAuxBlHdr() { return xeAuxBlMode() >= 3; }
+ static void xeTopoPublish(thread_call_param_t, thread_call_param_t) {
+ 	auto *svc = OSDynamicCast(IOService, reinterpret_cast<OSObject *>(gTopoAcc));
+ 	if (svc) svc->setProperty("xe-topo", (gTopoSs * 8) << 8 | gTopoL3, 32);
++	if (svc && gXeDpcd700Ret != 0xFFFFFFFFU) {
++		char k[20];
++		for (int i = 0; i < 4; i++) { snprintf(k, sizeof(k), "xe-dpcd700-%d", i); svc->setProperty(k, gXeDpcd700[i], 32); }
++		svc->setProperty("xe-dpcd700-ret", gXeDpcd700Ret, 32);
++		svc->setProperty("xe-dpcd340", gXeDpcd340, 32);
++		svc->setProperty("xe-dpcd340-ret", gXeDpcd340Ret, 32);
++	}
++	if (svc && gXeAuxBlN) {
++		svc->setProperty("xe-auxbl-n", gXeAuxBlN, 32);
++		svc->setProperty("xe-auxbl-ret", gXeAuxBlRet, 32);
++		svc->setProperty("xe-auxbl-lvl", gXeAuxBlDone, 32);
++		svc->setProperty("xe-auxbl-rb", gXeAuxBlRb, 32);
++	}
++	if (svc && gRc2N) {
++		svc->setProperty("xe-rowchk-pre", gRc2Pre, 32);
++		svc->setProperty("xe-rowchk-post", gRc2Post, 32);
++		svc->setProperty("xe-rowchk-n", gRc2N, 32);
++	}
++}
++static thread_call_t gTopoTc = nullptr;
++
++// xe/portguard (#8, #22, #28): AppleIntelPort::probePortState() calls the port's probePortMode() through vtable slot
++// 0x190 right after "HPD is high" (16.0.32 debug FB: call *0x190(%rax) at 0x2eb0b, return address = +0x207). In the
++// abstract base AppleIntelPort vtable (__ZTV14AppleIntelPort) that slot, and getHPDState at 0x180, are
++// ___cxa_pure_virtual; in AppleIntelPortHAL / AppleIntelPortHALDiags it is AppleIntelPortHAL::probePortMode (HookCase).
++// Three machines (HDMI-only desktop, eDP MoDT, ADL-S VGA bridge) panic there from WindowServer's enableController; the
++// XPS never does (its eDP port takes the built-in branch, which never reaches the call). The wrapper checks the
++// object's vptr: if slot 0x190 is the pure-virtual stub it does what Apple does when the sink can't be probed
++// (setPortMode(0) through vtable slot 0x138, state 2 into this+0x554, return 2) instead of calling it; otherwise, and for
++// a port that would take the built-in branch, it calls the original untouched. Logged once per port. On by default on
++// the spoofed path; off: -ngreennoportguard. The old byte patch f13b (mov eax,1 for every port) stays disabled.
++static mach_vm_address_t gXePortGuardOrg = 0, gXePureVirtual = 0, gXePureVirtualBase = 0, gXeGControllerSym = 0;
++static volatile uint32_t gXePortGuardN = 0;
++static mach_vm_address_t gXeInitHwCaps = 0;   // xe/hwcaps114c (#5), see xeHwCapsFill
++static void *volatile gXePortGuardSeen[16] = {};
++static uint32_t xePortGuardProbe(void *that) {
++	if (that && (gXePureVirtual || gXePureVirtualBase)) {
++		auto *vt = *reinterpret_cast<mach_vm_address_t *const *>(that);
++		const mach_vm_address_t slot = vt ? vt[0x190 / 8] : 0;
++		if (slot && (slot == gXePureVirtual || slot == gXePureVirtualBase)) {
++			// Apple's built-in branch (portInfo+0x14 bit 3 and !(gController->0xd40->0xf8 & 0x20)): setPortMode(1),
++			// state 2, without the vcall. Leave that one to the original.
++			auto *info = getMember<uint8_t *>(that, 0x548);
++			bool builtin = false;
++			if (info && (info[0x14] & 0x8) && gXeGControllerSym) {
++				auto *ctl = *reinterpret_cast<uint8_t **>(gXeGControllerSym);
++				auto *sub = ctl ? *reinterpret_cast<uint8_t **>(ctl + 0xd40) : nullptr;
++				builtin = sub && !(sub[0xf8] & 0x20);
++			}
++			if (!builtin) {
++				const mach_vm_address_t spm = vt[0x138 / 8];
++				if (spm && spm != gXePureVirtual && spm != gXePureVirtualBase)
++					reinterpret_cast<void (*)(void *, uint32_t)>(spm)(that, 0);
++				getMember<uint32_t>(that, 0x554) = 2;
++				OSIncrementAtomic(&gXePortGuardN);
++				bool seen = false;
++				for (size_t i = 0; i < arrsize(gXePortGuardSeen) && !seen; i++) {
++					if (gXePortGuardSeen[i] == that) seen = true;
++					else if (!gXePortGuardSeen[i] && OSCompareAndSwapPtr(nullptr, that, &gXePortGuardSeen[i])) break;
++				}
++				if (!seen && gXePortGuardN <= 64)
++					IOLog("XeNG PORTGUARD: port %p ddi %u: probePortMode (vtable 0x190) is pure virtual -> setPortMode(0), state 2 (n=%u)\n",
++						  that, info ? *reinterpret_cast<uint32_t *>(info) : 0xFFFFFFFFU, gXePortGuardN);
++				return 2;
++			}
++		}
++	}
++	return FunctionCast(xePortGuardProbe, gXePortGuardOrg)(that);
+ }
+ 
+ // ==== 6 kextInfos: ICL fallback + dual TGL identities (com.xxxxx and com.apple) from /Library/Extensions ====
+@@ -1219,6 +1314,25 @@ bool Gen11::processKext(KernelPatcher &patcher, size_t index, mach_vm_address_t
+ 		gTglFbBlockRuns++;
+ 		this->tglFBLoaded = true;
+ 		auto *activeKext = (kextG11FBTA.loadIndex == index) ? &kextG11FBTA : &kextG11FBT;
++
++        if (NGreen::callback->hpA7A1Profile && NGreen::callback->stolen_size == HPA7A1::DVMT60) {
++            const auto fbInit = patcher.solveSymbol(index, "__ZN24AppleIntelBaseController13FBMemMgr_InitEv", address, size);
++            patcher.clearError();
++            // Exact donor function and instruction/store fingerprint. An EFI
++            // DVMT patch may already have corrected this same sequence.
++            PANIC_COND(size < 0x5E227 + sizeof(HPA7A1::Original) || fbInit != address + 0x5E17A,
++                "ngreen", "HP DVMT: unqualified TGL framebuffer donor");
++            const auto state = HPA7A1::classify(reinterpret_cast<const uint8_t *>(fbInit + 0xAD), sizeof(HPA7A1::Original));
++            PANIC_COND(state == HPA7A1::Sequence::Unexpected, "ngreen", "HP DVMT: framebuffer instruction fingerprint mismatch");
++            if (state == HPA7A1::Sequence::Original) {
++                const LookupPatchPlus patches[] {{activeKext, HPA7A1::Original, HPA7A1::Corrected, sizeof(HPA7A1::Original), 1}};
++                PANIC_COND(!LookupPatchPlus::applyAll(patcher, patches, address, size), "ngreen", "HP DVMT: calculation patch failed");
++            }
++            PANIC_COND(HPA7A1::classify(reinterpret_cast<const uint8_t *>(fbInit + 0xAD), sizeof(HPA7A1::Original)) != HPA7A1::Sequence::Corrected,
++                "ngreen", "HP DVMT: post-patch verification failed");
++            NGreen::callback->iGPU->setProperty("xe-hp-dvmt-patched", true);
++            SYSLOG("ngreen", "HP DVMT: FBMemMgr_Init uses actual 60 MiB; task cleanup and allocation checks preserved");
++        }
+ 		NGreen::callback->setRMMIOIfNecessary();
+ 		SYSLOG("ngreen", "init AppleIntelTGLGraphicsFramebuffer");
+ 		
+@@ -1366,6 +1480,10 @@ bool Gen11::processKext(KernelPatcher &patcher, size_t index, mach_vm_address_t
+ 		};
+ 		PANIC_COND(!RouteRequestPlus::routeAll(patcher, index, requests, address, size), "ngreen","Failed to route dp symbols");
+ 		gTglFbRoutesDone++;
++		if (xeAuxBlMode()) {
++			gXeAuxBlWr = patcher.solveSymbol(index, "__ZN14AppleIntelPort8writeAUXEjPvj", address, size);
++			patcher.clearError();
++		}
+ 		if (checkKernelArgument("-ngreenfixbootmode")) {
+ 			SolveRequestPlus crtcSolve[] = {
+ 				{"__ZN24AppleIntelBaseController35hwCRTCToIODetailedTimingInformationEP21AppleIntelFramebufferP29IODetailedTimingInformationV2", gHwCrtcToTimingAddr},
+@@ -1379,6 +1497,28 @@ bool Gen11::processKext(KernelPatcher &patcher, size_t index, mach_vm_address_t
+ 				}
+ 			}
+ 		}
++		// xe/portguard (#8, #22, #28): spoofed path only, not fatal if a symbol is missing (prod FB has no symbols)
++		if (NGreen::callback && !NGreen::callback->isRealTGL && !checkKernelArgument("-ngreennoportguard")) {
++			gXePureVirtual = patcher.solveSymbol(KernelPatcher::KernelID, "___cxa_pure_virtual");
++			patcher.clearError();
++			const mach_vm_address_t baseVt = patcher.solveSymbol(index, "__ZTV14AppleIntelPort", address, size);
++			patcher.clearError();
++			if (baseVt) gXePureVirtualBase = *reinterpret_cast<const mach_vm_address_t *>(baseVt + 0x10 + 0x190);
++			gXeGControllerSym = patcher.solveSymbol(index, "_gController", address, size);
++			patcher.clearError();
++			if (gXePureVirtual || gXePureVirtualBase) {
++				KernelPatcher::RouteRequest pgRoutes[] = {
++					{"__ZN14AppleIntelPort14probePortStateEv", xePortGuardProbe, gXePortGuardOrg},
++				};
++				if (!patcher.routeMultiple(index, pgRoutes, address, size)) gXePortGuardOrg = 0;
++				patcher.clearError();
++			}
++			SYSLOG("ngreen", "XE-PORTGUARD: route=%d pure_virtual=0x%llx base slot 0x190=0x%llx gController=%d",
++				   gXePortGuardOrg != 0, (unsigned long long)gXePureVirtual, (unsigned long long)gXePureVirtualBase, gXeGControllerSym != 0);
++			IOLog("XeNG PORTGUARD: armed %d (pure_virtual %s, base vtable slot %s)\n", gXePortGuardOrg != 0,
++				  gXePureVirtual ? "ok" : "missing",
++				  !gXePureVirtualBase ? "missing" : gXePureVirtualBase == gXePureVirtual ? "= pure_virtual" : "differs");
++		}
+ 		gOrgGcdm = this->ogetCurrentDisplayMode; gOrgGpi = this->ogetPixelInformation; gOrgVdm = this->ovalidateDisplayMode;
+ 		SYSLOG("ngreen", "TGL FB routes applied (fixbootmode: getCurrentDisplayMode org=0x%llx, arg=%d)",
+ 			   (unsigned long long)this->ogetCurrentDisplayMode, (int)checkKernelArgument("-ngreenfixbootmode"));
+@@ -1674,6 +1814,9 @@ bool Gen11::processKext(KernelPatcher &patcher, size_t index, mach_vm_address_t
+ 				{activeKext, f13, r13, arrsize(f13),	1},
+ 				// f13b: mandatory. Without this bypass AppleIntelPort::probePortStateEv hits
+ 				// a pure-virtual call and panics in WindowServer during enableController.
++				// xe/portguard: stays disabled (commented out as inherited from upstream 95f8189): it forced
++				// mode 1 for every HPD-high port, real HAL ports too. XE-PORTGUARD (xePortGuardProbe) covers
++				// the panic and only acts when the port's slot 0x190 is ___cxa_pure_virtual.
+ 		//		{activeKext, f13b, r13b, arrsize(f13b),	1},
+ 				// f15: suppress getPathByPipe log flood at IGLogLevel=8.
+ 				// On platform 0x9a490000 all paths are on pipe 0; every scan cycle logs
+@@ -2121,6 +2264,9 @@ bool Gen11::processKext(KernelPatcher &patcher, size_t index, mach_vm_address_t
+ 				{"__ZN16IntelAccelerator10getGPUInfoEv", getGPUInfo, this->ogetGPUInfo},
+ 			};
+ 			PANIC_COND(!RouteRequestPlus::routeAll(patcher, index, gpuInfoRoute, address, size), "ngreen", "Failed to route getGPUInfo");
++			// xe/hwcaps114c (#5): re-derives the subslice-dependent caps if the fuse read left them at 0 (see getGPUInfo)
++			gXeInitHwCaps = patcher.solveSymbol(index, "__ZN16IntelAccelerator16initHardwareCapsEv", address, size);
++			patcher.clearError();
+ 		}
+ 
+ 		// SKU/device-ID panic bypass (verified @ 0x23c1d in LE binary)
+@@ -3451,9 +3597,66 @@ void Gen11::setupOptimalLaneCount(AppleIntel::AppleIntelBaseController *that, co
+ 		cached = hwLanes;
+ }
+ 
++using XeAuxFn = uint32_t (*)(void *, uint32_t, void *, uint32_t);
++static void xeAuxBlApply(thread_call_param_t, thread_call_param_t) {
++	void *port = gXeAuxBlPort;
++	if (!port || !gXeAuxBlWr || !gXeAuxBlRd) return;
++	auto wr = [&](uint32_t a, void *b, uint32_t n) { return reinterpret_cast<XeAuxFn>(gXeAuxBlWr)(port, a, b, n); };
++	auto rd = [&](uint32_t a, void *b, uint32_t n) { return reinterpret_cast<XeAuxFn>(gXeAuxBlRd)(port, a, b, n); };
++	const uint32_t lvl = gXeAuxBlLevel;
++	uint32_t ret, rb = 0, done;
++	if (xeAuxBlHdr()) {
++		static int maxNits = 0;
++		if (!maxNits && (!PE_parse_boot_argn("ngreenauxnits", &maxNits, sizeof(maxNits)) || maxNits < 10 || maxNits > 2000)) maxNits = 400;
++		uint32_t nits = lvl ? (uint32_t)(((uint64_t)lvl * (uint32_t)maxNits + 0x7FFF) / 0xFFFF) : 0;
++		if (lvl && nits < 2) nits = 2;
++		uint8_t c = 0;
++		ret = rd(0x344, &c, 1);
++		if (!ret && !(c & 0x10)) { c |= 0x10; ret = wr(0x344, &c, 1); }   // brightness AUX enable
++		uint8_t pkt[4] = {(uint8_t)nits, (uint8_t)(nits >> 8), 0, 0};
++		if (!ret) ret = wr(0x354, pkt, 4);
++		uint8_t c2 = 0;
++		rd(0x354, &rb, 4);
++		rd(0x344, &c2, 1);
++		rb = (rb & 0xFFFF) | ((uint32_t)c2 << 24);
++		done = nits;
++	} else {
++		const bool wide = (gXeDpcd700[0] >> 16) & 0x4;   // 0x702 bit 2: 16-bit level
++		uint8_t v[2] = {(uint8_t)(lvl >> 8), (uint8_t)lvl};
++		ret = wr(0x722, v, wide ? 2 : 1);
++		uint8_t m = 0, c = 0;
++		if (!ret && !(ret = rd(0x721, &m, 1)) && (m & 3) != 2) { m = (uint8_t)((m & ~3U) | 2); ret = wr(0x721, &m, 1); }   // DPCD mode
++		if (!ret && !(ret = rd(0x720, &c, 1)) && !(c & 1)) { c |= 1; ret = wr(0x720, &c, 1); }                             // backlight enable
++		rd(0x720, &rb, 4);
++		done = lvl;
++	}
++	gXeAuxBlRet = ret; gXeAuxBlRb = rb; gXeAuxBlDone = done;
++	if (OSIncrementAtomic(&gXeAuxBlN) < 8) IOLog("XeNG AUXBL: mode %d level 0x%x ret 0x%x rb 0x%08x\n", xeAuxBlMode(), done, ret, rb);
++	xeTopoPublish(nullptr, nullptr);
++}
++
+ IOReturn Gen11::wrapICLReadAUX(void *that, uint32_t address, void *buffer, uint32_t length) {
+ 
+ 	IOReturn retVal = FunctionCast(wrapICLReadAUX, callback->orgICLReadAUX)(that, address, buffer, length);
++	if (retVal == kIOReturnSuccess && address == 0 && buffer && length >= 16 && gXeDpcd700Ret == 0xFFFFFFFFU) {
++		// xe/auxbl: eDP backlight caps, read once next to Apple's first sink-caps read (read only)
++		uint32_t caps[4] = {0, 0, 0, 0}, hdr = 0;
++		gXeDpcd700Ret = FunctionCast(wrapICLReadAUX, callback->orgICLReadAUX)(that, 0x700, caps, 16);
++		for (int i = 0; i < 4; i++) gXeDpcd700[i] = caps[i];
++		gXeDpcd340Ret = FunctionCast(wrapICLReadAUX, callback->orgICLReadAUX)(that, 0x340, &hdr, 4);
++		gXeDpcd340 = hdr;
++		const bool vesaOk = gXeDpcd700Ret == 0 && ((caps[0] >> 8) & 0x4) && ((caps[0] >> 16) & 0x2);
++		const bool hdrOk = gXeDpcd340Ret == 0 && ((hdr >> 8) & 0x10);
++		// -ngreenauxblforce (#15): arm even if the panel doesn't advertise the interface (0x341 bit 4 / 0x701-0x702)
++		const bool force = xeAuxBlMode() && checkKernelArgument("-ngreenauxblforce");
++		if (xeAuxBlMode() && gXeAuxBlWr && (force || (xeAuxBlHdr() ? hdrOk : vesaOk))) {
++			gXeAuxBlRd = callback->orgICLReadAUX;
++			gXeAuxBlTc = thread_call_allocate(xeAuxBlApply, nullptr);
++			if (gXeAuxBlTc) gXeAuxBlPort = that;
++		}
++		IOLog("XeNG AUXBL: caps 0x700 %08x 0x340 %08x mode %d armed %d%s\n", caps[0], hdr, xeAuxBlMode(), gXeAuxBlPort ? 1 : 0,
++			  force ? " (forced)" : "");
++	}
+ 
+ 	// V97AUX: log first ~40 AUX reads to diagnose eDP link training failures.
+ 	static int auxLogCount = 0;
+@@ -3913,6 +4116,25 @@ static uint32_t xeFixFilterWrite(unsigned long reg, uint32_t val) {
+ 					val = v > gBlHwFreq ? gBlHwFreq : (uint32_t)v;
+ 				}
+ 				gBlLastOut = val;
++				if (xeAuxBlMode() && gXeAuxBlTc && gBlHwFreq && gBlHwFreq != 0xFFFFFFFF) {   // xe/auxbl
++					uint64_t l = (uint64_t)val * 0xFFFF / gBlHwFreq;
++					gXeAuxBlLevel = l > 0xFFFF ? 0xFFFF : (uint32_t)l;
++					thread_call_enter(gXeAuxBlTc);
++					if ((xeAuxBlMode() == 2 || xeAuxBlMode() == 4) && val) val = gBlHwFreq;
++				} else if (xeAuxBlMode() && gXeAuxBlTc) {
++					// xe/auxbl (#15): no usable PWM period in 0xC8254 (0 or all-ones, e.g. OLED panels with no PWM
++					// backlight): the duty is still in Apple's units, so scale against ngreenblmax or Apple's own period.
++					// The PWM write itself goes through unchanged.
++					const uint32_t den = blmax > 0 ? (uint32_t)blmax : gBlAppleFreq;
++					if (den) {
++						uint64_t l = (uint64_t)val * 0xFFFF / den;
++						gXeAuxBlLevel = l > 0xFFFF ? 0xFFFF : (uint32_t)l;
++						thread_call_enter(gXeAuxBlTc);
++						static int nf = 0;
++						if (nf++ < 4) IOLog("XeNG AUXBL: PWM period 0x%x unusable, level from duty 0x%x / %s 0x%x -> 0x%x\n",
++											gBlHwFreq, val, blmax > 0 ? "ngreenblmax" : "Apple period", den, gXeAuxBlLevel);
++					}
++				}
+ 			}
+ 		}
+ 	}
+@@ -6404,6 +6626,37 @@ void Gen11::getGPUInfoICL(void *that)
+ 		   numSlices, numSubSlices, maxEUPerSubSlice, totalEU);
+ }
+ 
++// xe/hwcaps114c (#5, #3): IntelAccelerator::getGPUInfo (16.0.2, 0x2847e) derives NumSlices (0x115c) and NumSubSlices
++// (0x1158 = popcount(DSS fuse) * 2, at 0x28654) from the fuses and then calls initHardwareCaps (0x2a666, call at 0x288bb),
++// which derives from them, for SKU 2 (0x1120): 0x114c = SS >> 1 (DSS count), 0x1128 = 2 * DSS, 0x1144 = (6 - DSS) * 2,
++// 0x1140 = 0x80 * DSS, 0x1168 = slices << 4 (SKU 1: DSS = SS, factor 1, max 12, 0x40). Our override below rewrites
++// 0x1158/0x115c only after all that, so when the fuse read returned 0 (TGL-H 9A68 in #5; the real-TGL path has no
++// NumSubSlices patch) those fields stay 0. get_hw_caps then copies 0x1110..0x118b to the Metal driver, where 0x114c
++// is mHWCaps+0x3c, the divisor of generate3DStatePS (WindowServer SIGFPE). When 0x114c is 0 after our override we
++// run initHardwareCaps again on the overridden counts (the same code Apple runs, so the SKU constants stay its own).
++// With a non-zero 0x114c (the XPS: 6) nothing is touched.
++static void xeHwCapsFill(void *that) {
++	if (getMember<uint32_t>(that, 0x114c) != 0) return;
++	const uint32_t b1128 = getMember<uint32_t>(that, 0x1128), b1144 = getMember<uint32_t>(that, 0x1144),
++				   b1140 = getMember<uint32_t>(that, 0x1140), b1168 = getMember<uint32_t>(that, 0x1168);
++	bool ok = false;
++	if (gXeInitHwCaps) ok = reinterpret_cast<bool (*)(void *)>(gXeInitHwCaps)(that);
++	const uint32_t ss = getMember<uint32_t>(that, 0x1158);
++	if (getMember<uint32_t>(that, 0x114c) == 0) {   // SKU not 1/2, or symbol missing: SKU 2 formula on our count
++		const uint32_t dss = (ss >> 1) ? (ss >> 1) : 1;
++		getMember<uint32_t>(that, 0x114c) = dss;
++		getMember<uint32_t>(that, 0x1128) = 2 * dss;
++		getMember<uint32_t>(that, 0x1144) = dss < 6 ? (6 - dss) * 2 : 0;
++		getMember<uint32_t>(that, 0x1140) = 0x80 * dss;
++		getMember<uint32_t>(that, 0x1168) = getMember<uint32_t>(that, 0x115c) << 4;
++	}
++	IOLog("XeNG HWCAPS: 0x114c was 0 (sku %u ss %u): initHardwareCaps %s -> 0x114c=%u 0x1128=%u->%u 0x1144=%u->%u "
++		  "0x1140=0x%x->0x%x 0x1168=0x%x->0x%x\n", getMember<uint32_t>(that, 0x1120), ss,
++		  !gXeInitHwCaps ? "missing" : ok ? "ok" : "failed", getMember<uint32_t>(that, 0x114c),
++		  b1128, getMember<uint32_t>(that, 0x1128), b1144, getMember<uint32_t>(that, 0x1144),
++		  b1140, getMember<uint32_t>(that, 0x1140), b1168, getMember<uint32_t>(that, 0x1168));
++}
++
+ void Gen11::getGPUInfo(void *that)
+ {
+ 
+@@ -6455,11 +6708,11 @@ void Gen11::getGPUInfo(void *that)
+ 		   numSlices, numSubSlices, maxEUPerSubSlice, totalEU, gTopoL3);
+ 	IOLog("XeNG TOPO: subslices=%u eu/ss=%u eu=%u l3=%u%s\n", numSubSlices, maxEUPerSubSlice, totalEU, gTopoL3,
+ 	      (numSubSlices == 12 && gTopoL3 == 8) ? " (default)" : " (boot-arg)");
++	xeHwCapsFill(that);
+ 	// published later from a thread_call, not from inside getGPUInfo
+-	static thread_call_t tc = nullptr;
+ 	gTopoAcc = that;
+-	if (!tc) tc = thread_call_allocate(xeTopoPublish, nullptr);
+-	if (tc) thread_call_enter(tc);
++	if (!gTopoTc) gTopoTc = thread_call_allocate(xeTopoPublish, nullptr);
++	if (gTopoTc) thread_call_enter(gTopoTc);
+ 
+ }
+ 
+@@ -6892,9 +7145,13 @@ void Gen11::wrapSetGTFrequencyMMIO(void *that, uint32_t val)
+ {
+ 	static int pisoMhz = -1;
+ 	if (pisoMhz < 0) {
+-		pisoMhz = 1500;
++        const bool hp = NGreen::callback && NGreen::callback->getHPA7A1Profile();
++		pisoMhz = hp ? HPA7A1::MaxFrequencyMHz : 1500;
+ 		PE_parse_boot_argn("ngreengtfreq", &pisoMhz, sizeof(pisoMhz));
+-		if (pisoMhz > 1500) pisoMhz = 1500;
++        if (hp) {
++            pisoMhz = HPA7A1::frequencyFloor(pisoMhz);
++            NGreen::callback->iGPU->setProperty("xe-hp-frequency-floor-mhz", static_cast<uint32_t>(pisoMhz), 32);
++        } else if (pisoMhz > 1500) pisoMhz = 1500;
+ 	}
+ 	gXeGtFreqApple = val;
+ 	gXeGtFreqN++;
+@@ -7211,6 +7468,24 @@ unsigned long Gen11::startGraphicsEngine(void *that)
+ 		SYSLOG("ngreen", "V163: startGraphicsEngine post-clear FF_SLICE_CS_CHICKEN1=0x%08x (ret=%lu)",
+ 			NGreen::callback->readReg32(GEN7_FF_SLICE_CS_CHICKEN1), ret);
+ 		xeLrcaRepair("post-start");
++		// xe/rowchk (25/10, #9): Wa_1606931601 + Wa_1508744258 (i915 rcs_engine_wa_init, tgl/adl-p): GEN8_ROW_CHICKEN2
++		// (0xe4f4, masked) bits 14|15 = GEN12_DISABLE_EARLY_READ | GEN12_DISABLE_READ_SUPPRESSION. Upstream NootedGreen has
++		// them in dead code after a return and Apple only sets bits 0/1/8. Without them SIMD32 kernels read one stale GRF
++		// (lanes 8-15, .x channel): non-deterministic results in kernels with private arrays, the short dashes of Core Image's
++		// Lanczos (Preview/Photos zoom). Written after Apple's start, with the render well held awake through our own
++		// FORCEWAKE_RENDER requester bit (5) so Apple's references stay untouched; without forcewake the write is lost.
++		// Readback in ioreg xe-rowchk-* (post bit 31 = forcewake acked). -ngreennorowchk turns it off.
++		if (xeFixEnabled() && !checkKernelArgument("-ngreennorowchk")) {
++			auto *cb = NGreen::callback;
++			cb->writeReg32(FORCEWAKE_RENDER_GEN9, (1u << 21) | (1u << 5));
++			for (int i = 0; i < 500 && !(cb->readReg32(FORCEWAKE_ACK_RENDER_GEN9) & (1u << 5)); i++) IODelay(100);
++			gRc2Pre = cb->readReg32(GEN8_ROW_CHICKEN2);
++			cb->writeReg32(GEN8_ROW_CHICKEN2, (0xC000u << 16) | 0xC000u);
++			gRc2Post = cb->readReg32(GEN8_ROW_CHICKEN2) | (cb->readReg32(FORCEWAKE_ACK_RENDER_GEN9) & (1u << 5) ? 0x80000000u : 0);
++			cb->writeReg32(FORCEWAKE_RENDER_GEN9, (1u << 21));
++			gRc2N++;
++			if (gTopoTc) thread_call_enter(gTopoTc);
++		}
+ 	}
+ 
+ 	return ret;
+diff --git a/src/NootedGreen/kern_green.cpp b/src/NootedGreen/kern_green.cpp
+index b1b6831..99d5198 100755
+--- a/src/NootedGreen/kern_green.cpp
++++ b/src/NootedGreen/kern_green.cpp
+@@ -2,6 +2,7 @@
+ //  details.
+ 
+ #include "kern_green.hpp"
++#include "kern_hp_a7a1.hpp"
+ #include "kern_gen11.hpp"
+ #include "kern_genx.hpp"
+ #include "kern_model.hpp"
+@@ -247,6 +248,12 @@ void NGreen::processPatcher(KernelPatcher &patcher) {
+ 
+         this->deviceId = WIOKit::readPCIConfigValue(this->iGPU, WIOKit::kIOPCIConfigDeviceID);
+         this->pciRevision = WIOKit::readPCIConfigValue(NGreen::callback->iGPU, WIOKit::kIOPCIConfigRevisionID);
++        uint32_t hpRequested = 0;
++        WIOKit::getOSDataValue(this->iGPU, "ngreen,hp-a7a1", hpRequested);
++        this->hpA7A1Profile = HPA7A1::matches(this->iGPU->configRead16(0), this->deviceId,
++            this->pciRevision, this->iGPU->configRead16(0x2C), this->iGPU->configRead16(0x2E), hpRequested == 1);
++        this->iGPU->setProperty("xe-hp-a7a1-profile", this->hpA7A1Profile);
++        this->iGPU->setProperty("xe-hp-dvmt-patched", false);
+ 
+         // V52: Detect real TGL vs spoofed RPL/ADL by CPU model
+         // TGL-U: model 0x8C, TGL-H: model 0x8D
+@@ -277,8 +284,14 @@ void NGreen::processPatcher(KernelPatcher &patcher) {
+ 		} else {
+ 			SYSLOG( "ngreen", "PANIC stolen_size=0 check DVMT in bios");
+ 		}
+-		if (stolen_size<128) stolen_size=128;
++		if (this->hpA7A1Profile) {
++            // Preserve the firmware's actual capacity on this measured HP;
++            // never advertise 128 MiB where the BIOS reserved only 60 MiB.
++            stolen_size = HPA7A1::dvmtBytes(static_cast<uint8_t>(gms)) / HPA7A1::MiB;
++        } else if (stolen_size<128) stolen_size=128;
+ 		stolen_size *= (1024 * 1024);
++        if (this->hpA7A1Profile)
++            this->iGPU->setProperty("xe-hp-dvmt-bytes", this->stolen_size, 32);
+ 		SYSLOG("ngreen", "stolen_size 0x%x",stolen_size);
+ 		
+ 		if (isLegacyIGPUPropSeedingEnabled()) {
+diff --git a/src/NootedGreen/kern_green.hpp b/src/NootedGreen/kern_green.hpp
+index c279582..f3659f6 100755
+--- a/src/NootedGreen/kern_green.hpp
++++ b/src/NootedGreen/kern_green.hpp
+@@ -283,6 +283,7 @@ class NGreen {
+     bool isRealTGL = false;  // true if CPU is genuine TGL (model 0x8C/0x8D), false if spoofed (RPL/ADL)
+ public:
+     bool getIsRealTGL() const { return isRealTGL; }
++    bool getHPA7A1Profile() const { return hpA7A1Profile; }
+     uint64_t mmioLength() const { return (rmmio && rmmioPtr) ? rmmio->getLength() : 0; }  // xe/rc6fw (22/10)
+ private:
+     bool dmcIsAdlp = false;    // true when ADL-P DMC blob was loaded in hwInitializeCState
+@@ -292,6 +293,7 @@ private:
+     uint32_t deviceId {0};
+     uint16_t revision {0};
+     uint32_t pciRevision {0};
++    bool hpA7A1Profile {false};
+     IOPCIDevice *iGPU {nullptr};
+ 	
+ 	IOMemoryMap *rmmio {nullptr};
+diff --git a/src/NootedGreen/kern_hp_a7a1.hpp b/src/NootedGreen/kern_hp_a7a1.hpp
+new file mode 100644
+index 0000000..1d9b896
+--- /dev/null
++++ b/src/NootedGreen/kern_hp_a7a1.hpp
+@@ -0,0 +1,39 @@
++// Local HP 250 profile. Identity and measured DVMT policy, no hardware writes.
++#ifndef NG_HP_A7A1_HPP
++#define NG_HP_A7A1_HPP
++#include <stdint.h>
++#include <stddef.h>
++namespace HPA7A1 {
++inline bool matches(uint16_t vendor, uint16_t device, uint8_t revision,
++                    uint16_t subvendor, uint16_t subsystem, bool requested) {
++    // 9A49 is allowed only as the configured TGL donor on this exact HP board.
++    return requested && vendor == 0x8086 && (device == 0xA7A1 || device == 0x9A49) &&
++        revision == 4 && subvendor == 0x103C && subsystem == 0x8B34;
++}
++constexpr uint32_t EUs = 80, NativeSubslices = 10, L3Banks = 6;
++constexpr int MaxFrequencyMHz = 1250; // Intel i5-1334U published maximum.
++inline int frequencyFloor(int requested) {
++    return requested < 0 ? 0 : requested > MaxFrequencyMHz ? MaxFrequencyMHz : requested;
++}
++constexpr uint32_t MiB = 1024 * 1024, DVMT60 = 60 * MiB;
++inline uint32_t dvmtBytes(uint8_t gms) {
++    if (gms < 0x10 || gms == 0x20 || gms == 0x30 || gms == 0x40)
++        return uint32_t(gms) * 32 * MiB;
++    if (gms >= 0xF0 && gms <= 0xFE)
++        return uint32_t((gms & 15) + 1) * 4 * MiB;
++    return 0;
++}
++// FBMemMgr_Init, exact 16.0.32 debug TGL donor. Preserve the member store.
++constexpr uint8_t Original[] = {0xC1,0xE0,0x11,0x25,0,0,0,0xFE,0x41,0x89,0x84,0x24,0xE4,0x0D,0,0};
++constexpr uint8_t Corrected[] = {0xB8,0,0,0xC0,0x03,0x90,0x90,0x90,0x41,0x89,0x84,0x24,0xE4,0x0D,0,0};
++enum class Sequence { Unexpected, Original, Corrected };
++inline Sequence classify(const uint8_t *code, size_t bytes) {
++    if (!code || bytes < sizeof(Original)) return Sequence::Unexpected;
++    bool original = true, corrected = true;
++    for (size_t i = 0; i < sizeof(Original); ++i) {
++        original &= code[i] == Original[i]; corrected &= code[i] == Corrected[i];
++    }
++    return original ? Sequence::Original : corrected ? Sequence::Corrected : Sequence::Unexpected;
++}
++}
++#endif
+diff --git a/tests/hp_a7a1_policy.cpp b/tests/hp_a7a1_policy.cpp
+new file mode 100644
+index 0000000..c0c00fd
+--- /dev/null
++++ b/tests/hp_a7a1_policy.cpp
+@@ -0,0 +1,38 @@
++#include "../src/NootedGreen/kern_hp_a7a1.hpp"
++#include <cassert>
++int main() {
++    using namespace HPA7A1;
++    assert(matches(0x8086,0xA7A1,4,0x103C,0x8B34,true));
++    assert(matches(0x8086,0x9A49,4,0x103C,0x8B34,true));
++    assert(!matches(0x8086,0xA7A1,4,0x103C,0x8B34,false));
++    assert(!matches(0x8086,0xA7A0,4,0x103C,0x8B34,true));
++    assert(!matches(0x8086,0xA7A1,3,0x103C,0x8B34,true));
++    assert(!matches(0x8086,0xA7A1,4,0x17AA,0x8B34,true));
++    assert(!matches(0x8086,0xA7A1,4,0x103C,0x8B35,true));
++    assert(!matches(0x1002,0xA7A1,4,0x103C,0x8B34,true));
++    assert(EUs==80 && NativeSubslices==10 && L3Banks==6);
++    assert(MaxFrequencyMHz==1250);
++    assert(frequencyFloor(1500)==1250 && frequencyFloor(1250)==1250);
++    assert(frequencyFloor(900)==900 && frequencyFloor(0)==0 && frequencyFloor(-1)==0);
++    // Intel GMS 0xF0..0xFE denotes four-MiB increments, not 32-MiB units.
++    for (unsigned i=0;i<15;++i) assert(dvmtBytes(0xF0+i)==(i+1)*4*1024*1024);
++    assert(dvmtBytes(0xFE)==62914560);
++    assert(dvmtBytes(2)==67108864);
++    assert(dvmtBytes(0)==0 && dvmtBytes(0x11)==0 && dvmtBytes(0xFF)==0);
++    assert(classify(nullptr,16)==Sequence::Unexpected);
++    assert(classify(Original,15)==Sequence::Unexpected);
++    assert(classify(Original,sizeof(Original))==Sequence::Original);
++    assert(classify(Corrected,sizeof(Corrected))==Sequence::Corrected);
++    // Reject mutation anywhere in either instruction/store fingerprint.
++    for (unsigned i=0;i<sizeof(Original);++i) {
++        uint8_t a[sizeof(Original)], b[sizeof(Corrected)];
++        for (unsigned j=0;j<sizeof(Original);++j) { a[j]=Original[j];b[j]=Corrected[j]; }
++        a[i]^=0x80;b[i]^=0x80;
++        assert(classify(a,sizeof(a))==Sequence::Unexpected);
++        assert(classify(b,sizeof(b))==Sequence::Unexpected);
++    }
++    uint32_t immediate=0;
++    for (unsigned i=0;i<4;++i) immediate|=uint32_t(Corrected[1+i])<<(8*i);
++    assert(immediate==DVMT60);
++    for (unsigned i=8;i<sizeof(Original);++i) assert(Original[i]==Corrected[i]);
++}

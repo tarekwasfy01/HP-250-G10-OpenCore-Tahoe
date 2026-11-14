@@ -1,5 +1,5 @@
 {
-  "snapshot_date": "2026-11-12",
+  "snapshot_date": "2026-11-14",
   "model": "HP 250 15.6 inch G10 Notebook PC",
   "cpu": "Intel Core i5-1334U",
   "board": "8B34",
@@ -7,12 +7,12 @@
   "graphics_device": "8086:A7A1",
   "wifi_device": "10EC:B85B",
   "smbios_model": "MacBookPro16,2",
-  "gop_resolution": "1920x1080",
+  "gop_resolution": "Max",
   "opencore": "1.0.8",
   "owner_reported": {
     "macOS_boot": true,
     "wifi": true,
-    "graphics_acceleration": false
+    "graphics_acceleration": true
   },
   "identity_removed": true,
   "identity_must_be_generated_before_use": true,
@@ -21,11 +21,6 @@
       "bundle": "Lilu.kext",
       "identifier": "as.vit9696.Lilu",
       "version": "1.7.3"
-    },
-    {
-      "bundle": "WhateverXe.kext",
-      "identifier": "org.b00t0x.WhateverXe",
-      "version": "0.7.0"
     },
     {
       "bundle": "IOSkywalkFamily.kext",
@@ -106,6 +101,17 @@
       "bundle": "VoodooPS2Controller.kext/Contents/PlugIns/VoodooPS2Trackpad.kext",
       "identifier": "as.acidanthera.voodoo.driver.PS2Trackpad",
       "version": "2.3.8"
+    },
+    {
+      "bundle": "WhateverGreen.kext",
+      "identifier": "as.vit9696.WhateverGreen",
+      "version": "1.7.2"
+    },
+    {
+      "bundle": "NootedGreen.kext",
+      "identifier": "com.StezzaPilot.NootedGreen",
+      "version": "1.0.0"
     }
-  ]
+  ],
+  "graphics_caveat": "Hardware cursor corrupt; optional software arrow workaround. Other graphics paths unqualified."
 }

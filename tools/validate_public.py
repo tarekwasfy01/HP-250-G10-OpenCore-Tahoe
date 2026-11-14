@@ -27,7 +27,7 @@ def main():
     require(generic["SystemUUID"] == "00000000-0000-0000-0000-000000000000", "Public UUID must be zero")
     require(generic["ROM"] == bytes(6), "Public ROM must be zero")
     require(generic["SystemProductName"] == "MacBookPro16,2", "Unexpected SMBIOS model")
-    require(config["UEFI"]["Output"]["Resolution"] == "1920x1080", "Unexpected GOP resolution")
+    require(config["UEFI"]["Output"]["Resolution"] in ("1920x1080", "Max"), "Unexpected GOP resolution")
     require((ROOT / "EFI/BOOT/BOOTx64.efi").is_file(), "Missing BOOTx64.efi")
     require((OC / "OpenCore.efi").is_file(), "Missing OpenCore.efi")
     for data in config["NVRAM"]["Add"].values():

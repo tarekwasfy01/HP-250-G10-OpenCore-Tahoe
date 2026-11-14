@@ -1,0 +1,14 @@
+{
+  "fork": "dssoftx/Hackintosh-X1Carbon-G11-IrisXe-Tahoe",
+  "fork_commit": "5098a08c68cd03f279670027e8742488011dd245",
+  "reviewed_upstream": "24450b476d7ca025b83c85d7b8362caf3234d2f2",
+  "os_build": "25G332",
+  "gpu": "8086:A7A1 rev04 / HP103C:8B34",
+  "eu": 80,
+  "native_subslices": 10,
+  "l3_banks": 6,
+  "gt_default_mhz": 1250,
+  "dvmt_bytes": 62914560,
+  "uuid": "BD946BAB-0181-3565-B9B0-E9BD841F040F",
+  "sha256": "3cc9ad3601da5da16fe242ddbbf51b6d5760ed52145c64153e9ae56851617f57"
+}
