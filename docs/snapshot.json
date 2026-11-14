@@ -12,7 +12,12 @@
   "owner_reported": {
     "macOS_boot": true,
     "wifi": true,
-    "graphics_acceleration": true
+    "graphics_acceleration": true,
+    "audio_output": true,
+    "battery_reporting": true,
+    "microphone": false,
+    "bluetooth_scan": true,
+    "bluetooth_pairing": false
   },
   "identity_removed": true,
   "identity_must_be_generated_before_use": true,
@@ -55,6 +60,16 @@
     {
       "bundle": "VirtualSMC.kext",
       "identifier": "as.vit9696.VirtualSMC",
+      "version": "1.3.9"
+    },
+    {
+      "bundle": "ECEnabler.kext",
+      "identifier": "com.1Revenger1.ECEnabler",
+      "version": "1.0.6"
+    },
+    {
+      "bundle": "SMCBatteryManager.kext",
+      "identifier": "ru.usrsse2.SMCBatteryManager",
       "version": "1.3.9"
     },
     {
@@ -111,7 +126,31 @@
       "bundle": "NootedGreen.kext",
       "identifier": "com.StezzaPilot.NootedGreen",
       "version": "1.0.0"
+    },
+    {
+      "bundle": "AppleALC.kext",
+      "identifier": "as.vit9696.AppleALC",
+      "version": "1.9.8"
+    },
+    {
+      "bundle": "SimpleHDA.kext",
+      "identifier": "cn.laobamac.SimpleHDA",
+      "version": "1.0.1"
+    },
+    {
+      "bundle": "RealtekBluetoothFirmware.kext",
+      "identifier": "org.thegwchr.RealtekBluetoothFirmware",
+      "version": "1.0.2"
+    },
+    {
+      "bundle": "BlueToolFixup.kext",
+      "identifier": "as.acidanthera.BlueToolFixup",
+      "version": "2.7.2"
     }
   ],
-  "graphics_caveat": "Hardware cursor corrupt; optional software arrow workaround. Other graphics paths unqualified."
+  "graphics_caveat": "Hardware cursor corrupt; optional software arrow workaround. Other graphics paths unqualified.",
+  "os_build": "25G332",
+  "bluetooth_usb": "0BDA:B85D",
+  "audio_controller": "8086:51CA",
+  "audio_layout_trial": 11
 }

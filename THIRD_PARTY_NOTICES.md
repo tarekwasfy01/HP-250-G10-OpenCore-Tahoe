@@ -33,3 +33,14 @@ HookCase and OS-specific system graphics payloads are not included in this EFI.
 WhateverGreen upstream: https://github.com/acidanthera/WhateverGreen;
 license in `licenses/WhateverGreen.txt`. Existing license files for previously
 included components remain as historical attribution.
+
+
+## Battery/audio/Bluetooth additions (14 November 2026)
+
+- SMCBatteryManager: VirtualSMC project, same 1.3.9 generation as the retained VirtualSMC.
+- ECEnabler 1.0.6: https://github.com/averycblack/ECEnabler (Lilu plugin).
+- AppleALC 1.9.8: https://github.com/acidanthera/AppleALC.
+- SimpleHDA 1.0.1: https://github.com/laobamac/SimpleHDA. Its payload restores AppleHDA through EFI; included upstream notices and licenses in licenses/SimpleHDA apply. No HAL installer package is included here.
+- RealtekBluetoothFirmware 1.0.2: https://github.com/thegwchr/RealtekBluetoothFirmware. Local change: one USB matching personality for 0BDA:B85D, following upstream's documented matching procedure; executable and embedded firmware unchanged. Realtek firmware retains its upstream terms.
+- BlueToolFixup 2.7.2: https://github.com/acidanthera/BrcmPatchRAM. Other Broadcom firmware kexts from that archive are not included.
+- Native cursor trial: local narrowly scoped extension to the documented NootedGreen source lineage; see docs/nootedgreen-cursor-trial.patch. The original NootedGreen license remains applicable.

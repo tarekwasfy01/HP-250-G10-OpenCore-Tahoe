@@ -1,0 +1,54 @@
+--- a/kern_gen11.cpp
++++ b/kern_gen11.cpp
+@@ -1479,6 +1479,24 @@
+ 			//{"__ZN21AppleIntelFramebuffer16enableControllerEv", isPanelPowerOn},
+ 		};
+ 		PANIC_COND(!RouteRequestPlus::routeAll(patcher, index, requests, address, size), "ngreen","Failed to route dp symbols");
++        // HP-only, explicit opt-in; report the documented hardware cursor capability
++        // as unavailable. No register writes or image modifications in this hook.
++        uint32_t hpSoftwareCursor = 0;
++        if (NGreen::callback && NGreen::callback->getHPA7A1Profile()) {
++            WIOKit::getOSDataValue(NGreen::callback->iGPU, "ngreen,hp-swcursor", hpSoftwareCursor);
++        }
++        if (hpSoftwareCursor == 1) {
++            RouteRequestPlus cursorRequests[] = {
++                {"__ZN21AppleIntelFramebuffer12getAttributeEjPm", hpCursorGetAttribute, this->oHPCursorGetAttribute},
++            };
++            bool installed = RouteRequestPlus::routeAll(patcher, index, cursorRequests, address, size);
++            NGreen::callback->iGPU->setProperty("xe-hp-swcursor-hook", installed);
++            if (!installed) {
++                SYSLOG("ngreen", "HP cursor: capability route unavailable; original cursor retained");
++                patcher.clearError();
++            }
++        }
++
+ 		gTglFbRoutesDone++;
+ 		if (xeAuxBlMode()) {
+ 			gXeAuxBlWr = patcher.solveSymbol(index, "__ZN14AppleIntelPort8writeAUXEjPvj", address, size);
+@@ -12511,3 +12529,15 @@
+ 	LookupPatchPlus const p[] = {{kext, v2, blk, sizeof(blk), 1}};
+ 	return LookupPatchPlus::applyAll(patcher, p, address, size);
+ }
++
++IOReturn Gen11::hpCursorGetAttribute(AppleIntel::AppleIntelFramebuffer *that, uint32_t attribute, uintptr_t *value) {
++    auto result = FunctionCast(hpCursorGetAttribute, callback->oHPCursorGetAttribute)(that, attribute, value);
++    if (attribute == 0x63727372U && value && result == kIOReturnSuccess) { // 'crsr'
++        const uintptr_t original = *value;
++        *value = 0;
++        static uint32_t count = 0;
++        if (count++ < 8) SYSLOG("ngreen", "HP cursor: capability %lu -> 0; native software trial", (unsigned long)original);
++        NGreen::callback->iGPU->setProperty("xe-hp-swcursor-requested", true);
++    }
++    return result;
++}
+--- a/kern_gen11.hpp
++++ b/kern_gen11.hpp
+@@ -1549,6 +1549,8 @@
+ 	// WS as fully active.  All other attribute writes pass through unchanged.
+ 	static IOReturn wrapSetAttribute(void *that, uint32_t attr, uintptr_t value);
+ 	mach_vm_address_t oSetAttribute {};
++	static IOReturn hpCursorGetAttribute(AppleIntel::AppleIntelFramebuffer *that, uint32_t attribute, uintptr_t *value);
++	mach_vm_address_t oHPCursorGetAttribute {};
+ 	
+ 	static void blit3d_submit_rectlist(void *param_1,void *param_2,void *param_3);
+ 	mach_vm_address_t oblit3d_submit_rectlist {};

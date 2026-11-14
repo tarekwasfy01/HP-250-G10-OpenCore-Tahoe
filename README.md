@@ -18,7 +18,11 @@ video, sleep or external-display workload.
 | Hardware mouse cursor | Corrupted; software arrow workaround currently used |
 | Realtek RTL8852BE Wi-Fi | Owner reports working |
 | Keyboard / I2C touchpad | Drivers included; not comprehensively qualified |
-| Sleep, battery, audio, Bluetooth, camera, external video | Not comprehensively tested |
+| Battery percentage | Working, owner confirmed |
+| Internal audio output | Working, owner confirmed; layout 11 in this snapshot |
+| Microphone | Not working |
+| Realtek Bluetooth (USB 0BDA:B85D) | Discovery works; pairing fails |
+| Sleep/wake, camera, external video | Not comprehensively tested |
 
 ## Hardware and custom graphics profile
 
@@ -51,6 +55,38 @@ is **25G332**; other builds require separate compatibility validation.
 Do not mix this graphics configuration with WhateverXe or unrelated system
 payloads. Keep a working recovery boot path and a backup of your EFI and any
 system graphics modifications before changing your installation.
+
+
+## Battery, audio and Bluetooth update
+
+The owner confirmed battery reporting and audio output after the 14 November
+OCTEST test. The exported EFI includes that successful installation state.
+Microphone capture still fails. Bluetooth can discover devices but cannot pair;
+this is partial initialization, not working Bluetooth support.
+
+- **Battery:** SMCBatteryManager 1.3.9 with the existing VirtualSMC 1.3.9,
+  plus ECEnabler 1.0.6. Charge percentage works; cycles, temperature and
+  sleep/wake charging behavior have not been qualified.
+- **Audio:** AppleALC 1.9.8 plus SimpleHDA 1.0.1, which restores the missing
+  AppleHDA stack on Tahoe through EFI injection. `DisableLinkeditJettison` is
+  enabled. Layout 11 is set on `PciRoot(0x0)/Pci(0x1F,0x3)`; the controller is
+  Intel 8086:51CA. The codec is suspected ALC236, not independently dumped.
+  The optional SimpleHDA HAL package was not installed. No VoodooHDA is loaded.
+- **Bluetooth:** RealtekBluetoothFirmware 1.0.2 plus BlueToolFixup 2.7.2.
+  The Realtek executable is unchanged; its Info.plist has one additional
+  USB matching personality for the measured **0BDA:B85D**. Firmware selection
+  remains based on the actual HCI version. Discovery is confirmed; pairing
+  and Bluetooth audio are not working/qualified. No bluetoothd patch is included.
+
+The custom NootedGreen binary also contains an opt-in native software-cursor
+trial, enabled by `ngreen,hp-swcursor`. It reports the hardware cursor capability
+as unavailable. This flag does not prove correct native software-cursor rendering;
+the separately tested overlay arrow remains the confirmed workaround. See the
+[cursor-only source diff](docs/nootedgreen-cursor-trial.patch), applied after the
+[HP profile diff](docs/nootedgreen-hp.patch). It changes neither DVMT nor topology.
+
+Replacing an EFI does not fix the microphone or Bluetooth pairing automatically.
+The status table records observed limits rather than promising those features.
 
 ## Identity removed from the public EFI
 

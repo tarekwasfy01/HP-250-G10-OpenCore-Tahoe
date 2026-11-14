@@ -9,6 +9,8 @@
   "l3_banks": 6,
   "gt_default_mhz": 1250,
   "dvmt_bytes": 62914560,
-  "uuid": "BD946BAB-0181-3565-B9B0-E9BD841F040F",
-  "sha256": "3cc9ad3601da5da16fe242ddbbf51b6d5760ed52145c64153e9ae56851617f57"
+  "uuid": "BD127477-12A3-3DD7-8A23-42F23ECBEFC7",
+  "sha256": "ef25b29ad971fdcc07f188895874ef092d5ec613cacb1bab12567da6871d1a00",
+  "cursor_trial": true,
+  "cursor_trial_uuid": "BD127477-12A3-3DD7-8A23-42F23ECBEFC7"
 }

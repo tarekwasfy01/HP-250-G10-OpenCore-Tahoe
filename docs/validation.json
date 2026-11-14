@@ -2,11 +2,12 @@
   "date": "2026-11-14",
   "ocvalidate": "OpenCore 1.0.8: no issues",
   "public_identity_scrubbed": true,
-  "source": "live mounted OCTEST/EFI",
-  "runtime_report": "Metal Supported; 1536 MB; hardware cursor corrupted",
+  "source": "Exact reconstruction against SHA-256 manifest from successful OCTEST battery/audio/Bluetooth install; current partition recheck required by promotion script",
+  "runtime_report": "Owner confirms Metal acceleration, audio output and battery; microphone fails, Bluetooth discovery works but pairing fails",
   "checks": [
     "public template validator",
-    "known source SMBIOS value scan",
-    "source/TAHOE-BOOT file hash equality"
+    "known private SMBIOS value scan",
+    "all 87 private candidate files matched successful install manifest",
+    "no claim of TAHOE-BOOT transfer until privileged promotion succeeds"
   ]
 }
