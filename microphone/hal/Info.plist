@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>AudioServerPlugIn_IOKitUserClients</key>
+	<array>
+		<string>HP250DmicUserClient</string>
+	</array>
+	<key>CFBundleDevelopmentRegion</key>
+	<string>English</string>
+	<key>CFBundleExecutable</key>
+	<string>HP250Dmic</string>
+	<key>CFBundleIdentifier</key>
+	<string>com.tarekwasfy.HP250Dmic.driver</string>
+	<key>CFBundleInfoDictionaryVersion</key>
+	<string>6.0</string>
+	<key>CFBundleName</key>
+	<string>HP250Dmic</string>
+	<key>CFBundlePackageType</key>
+	<string>BNDL</string>
+	<key>CFBundleShortVersionString</key>
+	<string>0.1.0</string>
+	<key>CFBundleSupportedPlatforms</key>
+	<array>
+		<string>MacOSX</string>
+	</array>
+	<key>CFBundleVersion</key>
+	<string>0.1.0</string>
+	<key>CFPlugInFactories</key>
+	<dict>
+		<key>B18E3D78-729A-5A4C-8367-0B337AB7F973</key>
+		<string>HP250Dmic_Create</string>
+	</dict>
+	<key>CFPlugInTypes</key>
+	<dict>
+		<key>443ABAB8-E7B3-491A-B985-BEB9187030DB</key>
+		<array>
+			<string>B18E3D78-729A-5A4C-8367-0B337AB7F973</string>
+		</array>
+	</dict>
+	<key>LSMinimumSystemVersion</key>
+	<string>10.15</string>
+</dict>
+</plist>

@@ -1,0 +1,6 @@
+{
+  "source": "https://raw.githubusercontent.com/thesofproject/sof-bin/main/v2.2.x/sof-v2.2/intel-signed/sof-adl.ri",
+  "rpl_symlink_source": "https://raw.githubusercontent.com/thesofproject/sof-bin/main/v2.2.x/sof-v2.2/intel-signed/sof-rpl.ri",
+  "sha256": "294e5a51b1d3fc4ceda57780927c2a2ec95bb5d23477f879a9fb648c6c01cb30",
+  "note": "Official RPL alias resolves to the ADL image. Embedded unchanged in this HP250Dmic release; Intel license retained."
+}

@@ -1,13 +1,16 @@
 {
-  "date": "2026-11-14",
+  "date": "2026-11-15",
   "ocvalidate": "OpenCore 1.0.8: no issues",
   "public_identity_scrubbed": true,
-  "source": "Exact SHA-256 reconstruction of successful OCTEST BrightnessKeys install (89 private files); privileged promotion independently rechecks live source",
-  "runtime_report": "Owner confirms Metal, audio output, battery, S21 pairing and F2/F3; microphone silent with layout55; system sleep resume fails; powermetrics observed 4600MHz",
+  "source": "95-file private OCTEST promotion snapshot; owner-confirmed audible microphone capture; TAHOE-BOOT replacement hash-verified by user-run script",
+  "runtime_report": "Owner confirms internal microphone and camera; driver FW_READY, all setup IPC accepted, Streaming=True, DMAUnsafe=False; prior graphics/audio/wireless/battery/brightness status retained",
   "checks": [
-    "public template validator",
-    "known private SMBIOS value scan",
-    "all 87 private candidate files matched successful install manifest",
-    "no claim of TAHOE-BOOT transfer until privileged promotion succeeds"
+    "public EFI paths and dependency validator",
+    "known private identity scan",
+    "standalone microphone source build",
+    "actual HAL conversion and IPC/reply tests under ASan/UBSan",
+    "actual lazy service startup host harness",
+    "HAL pkg expanded: only expected HAL payload, non-relocatable install location",
+    "no live installation or automatic recording for release validation"
   ]
 }

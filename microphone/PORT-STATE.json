@@ -1,0 +1,16 @@
+{
+  "upstream_commit": "d13dafa48fe618db743a0b6fac77ad238fdaf3a1",
+  "controller": "8086:51ca",
+  "subsystem": "103c:8b34",
+  "channels": 2,
+  "rate": 48000,
+  "frame_bytes": 8,
+  "firmware": "sof-rpl.ri",
+  "physical_pdm_controller": 0,
+  "pdm_assignment_measured": false,
+  "hardware_capture_verified": true,
+  "autonomous_boot_capture": false,
+  "owner_confirmed_audible_capture": "2026-11-15",
+  "build": "lazy-controller-ipc3-reply-v1",
+  "kernel_uuid": "6C1D9A1B-2356-3B90-AA3F-0B8CE3907086"
+}

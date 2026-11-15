@@ -2,8 +2,8 @@
   "target_build": "25G332",
   "public_tools_package": "HP250-Graphics-Installer-Tools-20261114.pkg",
   "public_tools_sha256": "31fc4a74fc5aa67facbee9362a3afacf147f7d2fcb5fadc6a2f325d69d22222c",
-  "private_full_package_bytes": 81777629,
-  "private_full_package_sha256": "f2e7de6cb3248be1f9e4ab05d1dcca4bb71d899e2b81f2b85c0502741bbcbafa",
+  "private_full_package_bytes": 81787464,
+  "private_full_package_sha256": "cd782d4aa4e520a6a3afafa985c74862fc5ebd82d3dc1120c80173c72751c54c",
   "private_full_package_published": false,
   "validation": [
     "Built with pkgbuild",
@@ -12,5 +12,6 @@
     "No live installation performed",
     "No automatic reboot",
     "Public tools package includes no Apple graphics payload"
-  ]
+  ],
+  "private_full_package_rebuilt": "2026-11-15"
 }

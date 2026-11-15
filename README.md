@@ -1,163 +1,231 @@
-# HP 250 G10 — OpenCore / NootedGreen for macOS Tahoe
+# HP 250 G10 — macOS Tahoe, Iris Xe and internal microphone
 
-Sanitized EFI reference for one **HP 250 15.6-inch G10 with Core i5-1334U**.
-Snapshot update: **14 November 2026**. Generate your own SMBIOS identity before booting.
+Working reference for an **HP 250 G10 / Core i5-1334U**, updated **15 November 2026**.
+The owner confirmed desktop startup and **audible capture from the built-in microphone**
+with the included HP250Dmic build. The working OCTEST EFI was copied to TAHOE-BOOT;
+95 source files were verified. A post-copy TAHOE-BOOT boot test remains separate.
 
-## Current results
+**Generate your own SMBIOS identity before booting.** This is a hardware-specific
+reference. The EFI and microphone package do not install the graphics system stack.
 
-The owner reports successful desktop startup and working graphics acceleration.
-A local `system_profiler` report shows **Intel Iris Xe, 1536 MB dynamic VRAM,
-Metal Supported**, with the compatibility device ID `0x9A49`. This is evidence
-of the tested machine's current desktop, not qualification of every Metal,
-video, sleep or external-display workload.
+## Hardware and status
 
-| Feature | Result |
+| Component | Reference hardware |
 | --- | --- |
-| macOS Tahoe desktop | Working on the reference laptop, owner confirmed |
-| Metal / Iris Xe acceleration | Reported working; Metal Supported observed |
-| Hardware mouse cursor | Corrupted; software arrow workaround currently used |
-| Realtek RTL8852BE Wi-Fi | Owner reports working |
-| Keyboard / I2C touchpad | Drivers included; not comprehensively qualified |
-| F2/F3 brightness keys | Working after BrightnessKeys 1.0.3, owner confirmed |
+| Laptop / board / BIOS | HP 250 15.6-inch G10 / HP 8B34 / F.26 |
+| CPU | Core i5-1334U, Raptor Lake-U, 10 cores / 12 threads |
+| Graphics / panel | Iris Xe 8086:A7A1 rev 04, 80 EUs / 1920 × 1080 internal panel |
+| Audio | Intel 8086:51CA, subsystem 103C:8B34 / Realtek ALC236 |
+| Internal microphone | Two digital microphones through Intel SOF/SST |
+| Wireless | RTL8852BE 10EC:B85B / Bluetooth USB 0BDA:B85D |
+| Software | Tahoe 26.7.2 **25G332**, OpenCore **1.0.8**, MacBookPro16,2 |
+
+| Feature | Result on this laptop |
+| --- | --- |
+| Desktop startup | Working, owner confirmed with current OCTEST |
+| Iris Xe acceleration | Working; Metal Supported and 1536 MB dynamic VRAM observed |
+| Internal microphone | **Working, audible capture owner-confirmed on 15 November** |
+| Speakers / audio output | Working, owner confirmed |
+| Wi-Fi | Working, owner confirmed |
+| Bluetooth | Discovery and Samsung Galaxy S21 pairing confirmed |
 | Battery percentage | Working, owner confirmed |
-| Internal audio output | Working, owner confirmed; layout 55 in this snapshot |
-| Microphone | Not working |
-| Realtek Bluetooth (USB 0BDA:B85D) | Discovery and pairing with Samsung Galaxy S21 work, owner confirmed |
-| Sleep/wake, camera, external video | Not comprehensively tested |
+| Brightness slider and F2/F3 | Working, owner confirmed |
+| CPU Turbo Boost | 4600-MHz P-state previously observed |
+| Keyboard / touchpad | Included in working setup; not exhaustively qualified |
+| Camera | Working, owner confirmed |
+| Hardware cursor | Rendering corruption remains; separate software arrow used |
+| System sleep / lid resume | **Broken / unreliable** with this graphics stack |
+| External displays, Bluetooth audio, long recording and mic sleep/wake | Not qualified |
 
-## Hardware and custom graphics profile
+A separate local sleep workaround keeps the laptop running when closed. It is
+not installed by copying this EFI. Another panel, BIOS or macOS build needs its
+own validation; these results are not a guarantee for every HP 250 variant.
 
-- HP 250 G10, board **HP 8B34**, BIOS **F.26**.
-- Intel **Core i5-1334U**, Raptor Lake-U, 10 cores / 12 threads.
-- Intel Iris Xe **8086:A7A1 rev04**, subsystem **103C:8B34**, 80 EUs.
-- 1920 × 1080 internal display; Realtek **10EC:B85B** Wi-Fi.
-- OpenCore **1.0.8**, SMBIOS **MacBookPro16,2**.
+## Included files
 
-This snapshot uses **NootedGreen + WhateverGreen**, not WhateverXe. The custom
-NootedGreen HP profile explicitly checks device/revision/subsystem and configures
-80 EUs, 10 native subslices, six L3 banks and a 1250-MHz frequency parameter.
-A fingerprint-checked framebuffer patch corrects this laptop's DVMT calculation
-to **60 MiB**; incompatible binary patterns are rejected. See
-[build metadata](docs/nootedgreen-build.json) and [source patch](docs/nootedgreen-hp.patch).
-The patch is relative to the source lineage recorded there, not a universal GPU fix.
+- [`EFI/`](EFI): sanitized current EFI, custom NootedGreen + WhateverGreen,
+  audio output, Wi-Fi, Bluetooth, battery, brightness and **enabled HP250Dmic.kext**.
+- [**HP250Dmic-HAL-0.1.0-25G332.pkg**](packages/HP250Dmic-HAL-0.1.0-25G332.pkg):
+  actual microphone CoreAudio plug-in installer, with license notices.
+- [`microphone/`](microphone/README.md): microphone kernel/HAL source, build
+  script, Intel SOF firmware, pipeline definition and licenses.
+- [`installer/`](installer/README.md): builder for a **private full graphics
+  package from an existing matching local graphics installation**.
+- [Graphics Installer Tools.pkg](packages/HP250-Graphics-Installer-Tools-20261114.pkg):
+  graphics builder and documentation only, **not the graphics payload**.
+- [`docs/`](docs): hardware/component inventory and graphics source patches.
+- [`SHA256SUMS`](SHA256SUMS): public release file hashes.
 
-## Required system graphics stack — EFI alone is not sufficient
-
-The working reference installation also has a matching, separately installed
-TGL graphics/HookCase stack and kernel collections. Copying this EFI alone to
-an unprepared macOS installation does **not** install that stack.
-
-The local setup uses AppleIntelTGLGraphics, AppleIntelTGLGraphicsFramebuffer,
-AppleIntelGraphicsShared and associated GL/Metal/VA bundles, plus HookCase.
-Those OS-specific system graphics binaries, kernel collections, recovery
-images and installers are **not distributed here**. The observed macOS build
-is **25G332**; other builds require separate compatibility validation.
-
-Do not mix this graphics configuration with WhateverXe or unrelated system
-payloads. Keep a working recovery boot path and a backup of your EFI and any
-system graphics modifications before changing your installation.
-
-
-## Brightness keys
-
-The display brightness slider already worked. Adding BrightnessKeys 1.0.3
-made F2/F3 work on the reference HP, as confirmed by the owner. It is loaded
-after Lilu and uses the retained HP ACPI/XOSI configuration.
-
-## Battery, audio and Bluetooth update
-
-The owner confirmed battery reporting and audio output after the 14 November
-OCTEST test. The exported EFI includes that successful installation state.
-Microphone capture still fails. Bluetooth discovery and pairing with a Samsung
-Galaxy S21 are now confirmed by the owner. Automatic reconnection, other device
-profiles and sleep/wake behavior have not been qualified.
-
-- **Battery:** SMCBatteryManager 1.3.9 with the existing VirtualSMC 1.3.9,
-  plus ECEnabler 1.0.6. Charge percentage works; cycles, temperature and
-  sleep/wake charging behavior have not been qualified.
-- **Audio:** AppleALC 1.9.8 plus SimpleHDA 1.0.1, which restores the missing
-  AppleHDA stack on Tahoe through EFI injection. `DisableLinkeditJettison` is
-  enabled. Layout 55 is currently set on `PciRoot(0x0)/Pci(0x1F,0x3)`; the controller is
-  Intel 8086:51CA. The codec is confirmed as ALC236 (10EC:0236, revision 0x100002) by IORegistry.
-  Layout 55 is a microphone-routing trial; microphone input remains silent.
-  The optional SimpleHDA HAL package was not installed. No VoodooHDA is loaded.
-- **Bluetooth:** RealtekBluetoothFirmware 1.0.2 plus BlueToolFixup 2.7.2.
-  The Realtek executable is unchanged; its Info.plist has one additional
-  USB matching personality for the measured **0BDA:B85D**. Firmware selection
-  remains based on the actual HCI version. Discovery and pairing with a Samsung Galaxy S21 are confirmed.
-  Bluetooth audio, automatic reconnection and sleep/wake remain unqualified.
-  No bluetoothd patch is included.
-
-The custom NootedGreen binary also contains an opt-in native software-cursor
-trial, enabled by `ngreen,hp-swcursor`. It reports the hardware cursor capability
-as unavailable. This flag does not prove correct native software-cursor rendering;
-the separately tested overlay arrow remains the confirmed workaround. See the
-[cursor-only source diff](docs/nootedgreen-cursor-trial.patch), applied after the
-[HP profile diff](docs/nootedgreen-hp.patch). It changes neither DVMT nor topology.
-
-Replacing an EFI alone does not guarantee microphone or Bluetooth behavior on another installation.
-The status table records observed limits rather than promising those features.
-
-## Identity removed from the public EFI
-
-The public `EFI/OC/config.plist` has blank serial and MLB values, an all-zero
-SystemUUID and six zero ROM bytes. Bluetooth pairing state and transient boot
-device NVRAM values are removed. Private identities and runtime dumps are not
-part of this repository.
-
-Generate your own consistent **MacBookPro16,2** identity with
-[GenSMBIOS](https://github.com/corpnewt/GenSMBIOS). Set `SystemSerialNumber`, `MLB`,
-`SystemUUID` and `ROM` in `PlatformInfo → Generic`; keep that customized copy private.
-The local TAHOE-BOOT copy retains the owner's identity; only the public export
-is sanitized.
+No private serials, pairing state, raw hardware dumps, audio recordings, kernel
+collections or Apple-origin system graphics packages are published.
 
 ## Installation
 
-1. Compare your hardware IDs, BIOS, ACPI tables and display wiring with this laptop.
-2. Back up your working EFI and retain a separate boot/recovery option.
-3. Prepare the matching graphics stack separately; it is not supplied by this EFI.
-4. Generate a unique SMBIOS identity and validate with OpenCore 1.0.8 `ocvalidate`.
-5. Test the `EFI` directory from a separate FAT32 boot device before replacing an internal EFI.
+### 1. Preserve a recovery boot route
 
-`tools/validate_public.py` checks the public identity, active file paths, AML
-checksums and kext dependencies. `ocvalidate` checks configuration structure;
-neither check proves hardware compatibility. The firmware Secure Boot and
-OpenCore SecureBootModel settings are separate; the source setup uses disabled
-Secure Boot. Read and understand the included configuration before using it.
+Back up your working EFI and system modifications. Test from a separate FAT32
+boot device/test EFI before replacing the normal boot volume. Do not delete
+Windows boot files or another OS's EFI. These public packages do not repartition
+or clear a disk, and do not automatically install the EFI.
 
-## Components and licensing
+Compare your hardware IDs with the reference above. The microphone installer
+checks **8086:51CA / 103C:8B34** and **25G332**. Do not bypass those checks for a
+different laptop or macOS build. Python 3 is required by the installer tools;
+the microphone source build additionally requires Xcode command-line tools.
 
-OpenCore, Lilu, NootedGreen, WhateverGreen, VirtualSMC, NVMeFix, Voodoo input
-components and the Realtek Wi-Fi stack retain their respective licenses.
-See [third-party notices](THIRD_PARTY_NOTICES.md) and `licenses/`. The root
-license covers original repository documentation/helpers only and does not
-relicense bundled third-party binaries. NootedGreen's separate license includes
-restrictions: read it before redistributing or using commercially.
+### 2. Prepare the matching graphics system stack
 
-This project is an independent hardware-specific reference and is not affiliated
-with Apple, HP, Intel or the upstream driver authors.
+This EFI uses **custom NootedGreen + WhateverGreen, not WhateverXe**. It requires
+matching TGL graphics/framebuffer, HookCase, GPUBundles and shader compiler/LLVM
+bridge files inside macOS. Copying an EFI does not install them.
 
-## CPU and sleep observations
+See [graphics installation and recovery](installer/README.md) and
+[source lineage/build metadata](docs/nootedgreen-build.json). The public tools
+package installs only the builder. On an installation already containing the
+exact verified graphics source files, create a private full package:
 
-`powermetrics` observed a 4600-MHz P-state: CPU Turbo Boost is active.
-System sleep after closing the lid fails to resume reliably with this graphics
-stack. The owner applied a separate macOS display-only workaround that disables
-system sleep; it is not an EFI sleep fix. The laptop stays running while closed.
-This workaround is not installed by copying the public EFI.
+```sh
+python3 installer/build_local.py --source-root / --output "$HOME/Desktop/HP250-NootedGreen-SystemStack-25G332.pkg"
+```
 
-## Local system-stack .pkg and public installer tools
+If installation of that locally generated package is needed on a matching system:
 
-A verified **NootedGreen system-stack package builder** is now included under
-[`installer/`](installer/README.md), with license notices, a complete source
-hash manifest, exact module UUID checks, pre-install backups and failure rollback.
-It targets **25G332** and does not modify the EFI.
+```sh
+sudo installer -pkg "$HOME/Desktop/HP250-NootedGreen-SystemStack-25G332.pkg" -target /
+```
 
-The public [**HP250 Graphics Installer Tools.pkg**](packages/HP250-Graphics-Installer-Tools-20261114.pkg) installs the builder and documentation
-only. The complete graphics .pkg is generated locally from your existing verified
-files; Apple-origin graphics binaries are not redistributed in that public package.
-The full local package includes TGL graphics/framebuffer, HookCase, the patched
-Metal/shared bundles and the matching shader compiler/LLVM bridge. EFI-only
-battery, audio, Bluetooth and brightness drivers remain in the published EFI.
+Follow its backup/check instructions. **Do not reinstall graphics on the working
+laptop merely to add the microphone.** The public repository does not provide a
+self-contained fresh graphics installation: required Apple-origin system files
+are deliberately not redistributed. `/Library` graphics changes affect every
+EFI booting that macOS, so keep a paired system/EFI backup.
 
-See the [installer instructions and recovery limits](installer/README.md) before use.
-The confirmed working laptop does not need the graphics package reinstalled now.
+### 3. Personalize and validate the EFI
+
+Generate a consistent **MacBookPro16,2** identity using
+[GenSMBIOS](https://github.com/corpnewt/GenSMBIOS). In your private copy of
+`EFI/OC/config.plist`, fill `PlatformInfo → Generic → SystemSerialNumber`, `MLB`,
+`SystemUUID` and the six-byte `ROM`. The public template has empty serial/MLB,
+zero UUID and zero ROM. **Never commit your personalized config.**
+
+Check the unmodified public checkout:
+
+```sh
+python3 tools/validate_public.py
+shasum -a 256 -c SHA256SUMS
+```
+
+Use OpenCore **1.0.8 ocvalidate** on your personalized EFI. The repository checker
+intentionally rejects private nonblank identities, and the config checksum
+changes after personalization. Firmware Secure Boot and OpenCore SecureBootModel
+are separate settings; inspect the reference configuration and your firmware.
+
+Copy the complete `EFI` directory to the root of the test boot volume, retaining
+`EFI/BOOT/BOOTx64.efi` and `EFI/OC/OpenCore.efi`.
+
+### 4. Install the microphone CoreAudio plug-in
+
+Both pieces are required:
+
+| Piece | Location | Role |
+| --- | --- | --- |
+| HP250Dmic.kext | `EFI/OC/Kexts`, enabled under `Kernel → Add` | SOF firmware and digital microphone capture |
+| HP250Dmic.driver | `/Library/Audio/Plug-Ins/HAL` | Normal macOS recording input |
+
+From the repository root:
+
+```sh
+sudo installer -pkg packages/HP250Dmic-HAL-0.1.0-25G332.pkg -target /
+```
+
+The package is **unsigned and not notarized**; its plug-in is ad-hoc signed.
+It checks the tested HP/controller/build and backs up an existing HP250Dmic
+plug-in before replacement. It installs only the HAL plug-in, including licenses.
+It does not modify EFI, kernel collections, existing audio/graphics drivers,
+default input or microphone permissions. It performs no recording and no automatic
+reboot/CoreAudio restart.
+
+Do not also install HP250Dmic.kext into `/Library/Extensions` when using EFI
+injection. An older experiment already embedded in a kernel collection requires
+a checked migration, not blindly deleting system files or rebuilding all collections.
+
+### 5. Boot and test
+
+On HP use **F9 → test boot device**, or Boot from EFI File →
+`EFI/OC/OpenCore.efi`. After reaching the desktop, wait at least **30 seconds**
+and reopen the recording app. The driver stays enabled but hardware initialization
+is deferred until recording, avoiding early controller/power-tree interactions.
+
+Select **HP 250 G10 Internal Microphone** under System Settings → Sound → Input.
+Allow microphone access for the app under Privacy & Security. Speak, check the
+level, record a short sample and listen to it. A visible input alone is not proof
+of capture. Check speakers, graphics, wireless, battery and brightness before
+promoting a test EFI to the normal boot volume.
+
+## How the microphone works
+
+The built-in digital mic uses the **Intel SOF DSP path**, rather than the silent
+ALC236 analog input exposed by the previous AppleALC layout. AppleALC + SimpleHDA
+remain responsible for the working analog output; HP250Dmic does not replace them.
+
+The custom build targets the exact HP controller/subsystem, uses production-signed
+Intel IPC3 `sof-rpl.ri`, and creates a two-channel **48-kHz S32** DMIC → buffer →
+host pipeline. A 64-KiB ring is converted to stereo Float32 for CoreAudio. It uses
+spare stream descriptors, polled IPC and only host DSP core 0. Generic SOF replies
+and command-specific replies are validated separately. Startup performs no BAR
+mapping/register polling or AppleHDA power-tree registration.
+
+The working PDM0 stereo profile now has owner-confirmed audible capture. Other HP
+wiring, beamforming, long recording stability and sleep/wake are not qualified.
+See [source/build details](microphone/README.md).
+
+Read status without recording:
+
+```sh
+ioreg -r -c HP250Dmic -l -w0
+kmutil showloaded | grep HP250Dmic
+```
+
+During the successful test: `BootResult = OK FW_READY`, all nine setup IPC messages
+accepted, `Streaming = Yes`, `DMAUnsafe = No`. Before the first recording request,
+`Ready = No` is expected because initialization is lazy. `StartDeferred = Yes`
+early after startup means the 30-second delay has not expired.
+
+If capture aborts, check the matching EFI/HAL snapshot, actual boot EFI, selected
+input, startup delay and app permissions. The old silent analog input is a separate
+device. Do not change unrelated graphics files or add arbitrary audio layout IDs
+to hide a DSP error. If a test EFI hangs, use the separate known-good boot route
+and restore its private backup. Disabling only HP250Dmic's entry is a recovery
+option; it does not repair the microphone.
+
+## Other drivers and remaining limits
+
+- **Graphics:** custom HP NootedGreen profile: 80 EUs, 10 native subslices,
+  six L3 banks, 1250-MHz parameter and fingerprint-checked **60-MiB DVMT**
+  correction. [HP patch](docs/nootedgreen-hp.patch).
+- **Output:** AppleALC 1.9.8 + SimpleHDA 1.0.1, layout 55; no VoodooHDA.
+- **Bluetooth:** RealtekBluetoothFirmware 1.0.2 with measured USB match;
+  BlueToolFixup 2.7.2. Bluetooth audio/reconnection remain unqualified.
+- **Battery:** VirtualSMC/SMCBatteryManager 1.3.9 + ECEnabler 1.0.6.
+- **Brightness:** BrightnessKeys 1.0.3 with retained HP ACPI/XOSI configuration.
+- **Cursor:** [optional NootedGreen trial](docs/nootedgreen-cursor-trial.patch)
+  does not establish correct cursor rendering; a separate software arrow is used.
+- **Sleep:** lid resume remains unreliable. The local display-only workaround is
+  not included in the EFI or microphone installer and keeps the laptop running.
+
+## Backup, privacy and licensing
+
+Keep a **private paired recovery copy** of your personalized EFI, matching graphics
+payload, HAL and applicable kernel collections. GitHub is a sanitized source/binary
+reference, not a complete personal recovery image or macOS installer. EFI backups
+alone cannot undo modifications in `/Library`.
+
+Serial, MLB, SystemUUID, ROM and saved Bluetooth/boot state are removed from the
+public export. Private local recovery copies retain identity and stay outside Git.
+Read [third-party notices](THIRD_PARTY_NOTICES.md), `licenses/` and
+`microphone/licenses/`. HP250Dmic derives from
+[TGLDmic](https://github.com/labrouss/TGLDmic) and the minimal stereo approach in
+[LatSOFAudio](https://github.com/shubhambanekar/LatSOFAudio); BSD-3-Clause notices
+are retained. Intel firmware has its separate Intel license. NootedGreen has
+separate license restrictions. The root MIT license does not relicense third-party
+code or binaries. This project is unaffiliated with Apple, HP and Intel.

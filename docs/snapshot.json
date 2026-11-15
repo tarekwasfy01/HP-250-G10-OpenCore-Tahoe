@@ -1,5 +1,5 @@
 {
-  "snapshot_date": "2026-11-14",
+  "snapshot_date": "2026-11-15",
   "model": "HP 250 15.6 inch G10 Notebook PC",
   "cpu": "Intel Core i5-1334U",
   "board": "8B34",
@@ -15,12 +15,13 @@
     "graphics_acceleration": true,
     "audio_output": true,
     "battery_reporting": true,
-    "microphone": false,
+    "microphone": true,
     "bluetooth_scan": true,
     "bluetooth_pairing": true,
     "brightness_keys_f2_f3": true,
     "cpu_turbo": true,
-    "system_sleep_resume": false
+    "system_sleep_resume": false,
+    "camera": true
   },
   "identity_removed": true,
   "identity_must_be_generated_before_use": true,
@@ -154,6 +155,11 @@
       "bundle": "BlueToolFixup.kext",
       "identifier": "as.acidanthera.BlueToolFixup",
       "version": "2.7.2"
+    },
+    {
+      "bundle": "HP250Dmic.kext",
+      "identifier": "com.tarekwasfy.HP250Dmic",
+      "version": "0.1.0"
     }
   ],
   "graphics_caveat": "Hardware cursor corrupt; optional software arrow workaround. Other graphics paths unqualified.",
@@ -167,5 +173,17 @@
     "Bluetooth audio and other profiles",
     "sleep/wake"
   ],
-  "audio_codec": "10EC:0236 revision 0x100002"
+  "audio_codec": "10EC:0236 revision 0x100002",
+  "microphone": {
+    "driver": "HP250Dmic",
+    "version": "0.1.0",
+    "build": "lazy-controller-ipc3-reply-v1",
+    "channels": 2,
+    "sample_rate": 48000,
+    "controller": "8086:51CA",
+    "subsystem": "103C:8B34",
+    "firmware": "sof-rpl.ri / IPC3 2.2",
+    "confirmed_audible_capture": true,
+    "sleep_wake_qualified": false
+  }
 }

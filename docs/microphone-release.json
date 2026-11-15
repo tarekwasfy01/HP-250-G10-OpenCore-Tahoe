@@ -1,0 +1,11 @@
+{
+  "target_build": "25G332",
+  "kernel_uuid": "6C1D9A1B-2356-3B90-AA3F-0B8CE3907086",
+  "package": "HP250Dmic-HAL-0.1.0-25G332.pkg",
+  "package_sha256": "3da8d072b1e266193a8041da1b05f5e95ebd3407cfc33003aefdd0742db58b9f",
+  "developer_id_signed": false,
+  "notarized": false,
+  "only_installs": "/Library/Audio/Plug-Ins/HAL/HP250Dmic.driver",
+  "owner_confirmed_capture": true,
+  "installer_executed_during_release_validation": false
+}

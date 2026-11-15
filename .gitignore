@@ -21,3 +21,9 @@ nvram.plist
 .DS_Store
 ._*
 __pycache__/
+
+# Local microphone build outputs
+microphone/build/
+microphone/firmware-embed.s
+__pycache__/
+*.pyc

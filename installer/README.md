@@ -29,7 +29,7 @@ Alternatively, run `python3 installer/build_local.py --source-root / --output /y
 - Checks installed file hashes. On installation/registration failure, attempts to restore saved files and kernel collections. Power loss or a kernel panic cannot be made transactional.
 - Keeps private backups under `/Library/Application Support/HP250Graphics/Backups/<timestamp>` and installs licensing notices. No automatic reboot.
 
-**The shared macOS stack affects every EFI booting this macOS.** A different bootloader does not isolate `/Library`. Keep an external recovery route and a matching known-good EFI before installing. This package does not restore or create the EFI, and does not make the internal microphone or system sleep work.
+**The shared macOS stack affects every EFI booting this macOS.** A different bootloader does not isolate `/Library`. Keep an external recovery route and a matching known-good EFI before installing. This package does not restore or create the EFI, and does not install the separate HP250Dmic microphone components or fix system sleep. See the root guide for the now owner-confirmed microphone setup.
 
 After success, restart manually through the matching NootedGreen EFI. A local build or passed checks do not qualify a new macOS build or another laptop. An installer error must be investigated before rebooting.
 

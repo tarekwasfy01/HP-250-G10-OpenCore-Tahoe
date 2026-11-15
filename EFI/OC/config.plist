@@ -431,6 +431,10 @@
 				</data>
 				<key>hda-gfx</key>
 				<string>onboard-1</string>
+				<key>alc-verbs</key>
+				<data>
+				AQAAAA==
+				</data>
 			</dict>
 		</dict>
 		<key>Delete</key>
@@ -901,6 +905,24 @@
 				<true/>
 				<key>ExecutablePath</key>
 				<string>Contents/MacOS/BlueToolFixup</string>
+				<key>MaxKernel</key>
+				<string>25.99.99</string>
+				<key>MinKernel</key>
+				<string>25.0.0</string>
+				<key>PlistPath</key>
+				<string>Contents/Info.plist</string>
+			</dict>
+			<dict>
+				<key>Arch</key>
+				<string>x86_64</string>
+				<key>BundlePath</key>
+				<string>HP250Dmic.kext</string>
+				<key>Comment</key>
+				<string>Experimental HP250G10 SOF stereo DMIC; on-demand capture</string>
+				<key>Enabled</key>
+				<true/>
+				<key>ExecutablePath</key>
+				<string>Contents/MacOS/HP250Dmic</string>
 				<key>MaxKernel</key>
 				<string>25.99.99</string>
 				<key>MinKernel</key>

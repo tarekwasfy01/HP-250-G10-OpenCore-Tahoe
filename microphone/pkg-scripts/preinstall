@@ -1,0 +1,34 @@
+#!/bin/bash
+set -euo pipefail
+[[ "${3:-/}" == / ]] || { echo 'Only the running startup volume is supported.'; exit 1; }
+/usr/bin/python3 - <<'PY'
+from pathlib import Path
+import datetime,hashlib,json,os,plistlib,shutil,subprocess
+assert os.geteuid()==0
+assert subprocess.check_output(['/usr/bin/sw_vers','-buildVersion'],text=True).strip()=='25G332','Only tested on macOS build 25G332'
+assert subprocess.check_output(['/usr/bin/uname','-m'],text=True).strip()=='x86_64','Intel only'
+def n(x):return int.from_bytes(x[:4],'little') if isinstance(x,bytes) else x
+def match(items):
+ for p in items:
+  if tuple(n(p.get(k)) for k in ['vendor-id','device-id','subsystem-vendor-id','subsystem-id'])==(0x8086,0x51ca,0x103c,0x8b34):return True
+  if match(p.get('IORegistryEntryChildren',[])):return True
+ return False
+assert match(plistlib.loads(subprocess.check_output(['/usr/sbin/ioreg','-a','-r','-c','IOPCIDevice','-l']))),'This is not the tested HP audio controller'
+target=Path('/Library/Audio/Plug-Ins/HAL/HP250Dmic.driver')
+for p in [target,*target.parents]:assert not p.is_symlink(),'Symlink installation path refused'
+def inv(folder):
+ out={}
+ for p in folder.rglob('*'):
+  assert not p.is_symlink()
+  if p.is_file():out[str(p.relative_to(folder))]=hashlib.sha256(p.read_bytes()).hexdigest()
+ return out
+if target.exists():
+ info=plistlib.loads((target/'Contents/Info.plist').read_bytes())
+ assert info['CFBundleIdentifier']=='com.tarekwasfy.HP250Dmic.driver','Unrelated bundle at installation path'
+ backup=Path('/Library/Application Support/HP250Dmic/Backups')/datetime.datetime.now().strftime('%Y%m%d-%H%M%S-%f')
+ backup.mkdir(parents=True,mode=0o700)
+ before=inv(target);shutil.copytree(target,backup/'HP250Dmic.driver',copy_function=shutil.copyfile)
+ assert inv(backup/'HP250Dmic.driver')==before==inv(target),'Backup verification failed'
+ (backup/'sha256.json').write_text(json.dumps(before,indent=2))
+ print('Previous HAL plug-in backed up:',backup)
+PY

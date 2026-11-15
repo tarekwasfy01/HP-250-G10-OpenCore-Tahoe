@@ -3,6 +3,7 @@
 from pathlib import Path
 import plistlib
 import struct
+import hashlib
 
 ROOT = Path(__file__).resolve().parents[1]
 OC = ROOT / "EFI" / "OC"
@@ -58,6 +59,15 @@ def main():
         loaded.add(info["CFBundleIdentifier"])
     active = {e["BundlePath"] for e in config["Kernel"]["Add"] if e["Enabled"]}
     require(not ({"WhateverXe.kext", "WhateverGreen.kext"} <= active), "Conflicting graphics plugins")
+    require("HP250Dmic.kext" in active, "Confirmed microphone driver must be enabled")
+    mic = plistlib.loads((OC / "Kexts/HP250Dmic.kext/Contents/Info.plist").read_bytes())
+    require("com.apple.kpi.bsd" in mic["OSBundleLibraries"], "Missing microphone BSD dependency")
+    personality = mic["IOKitPersonalities"]["HP250Dmic"]
+    require(personality["IOPCIPrimaryMatch"] == "0x51ca8086", "Wrong microphone controller")
+    require(personality["IOPCISecondaryMatch"] == "0x8b34103c", "Wrong HP subsystem")
+    firmware = (ROOT / "microphone/firmware/sof-rpl.ri").read_bytes()
+    require(hashlib.sha256(firmware).hexdigest() == "294e5a51b1d3fc4ceda57780927c2a2ec95bb5d23477f879a9fb648c6c01cb30", "Firmware differs")
+    require(firmware in (OC / "Kexts/HP250Dmic.kext/Contents/MacOS/HP250Dmic").read_bytes(), "Expected SOF firmware not embedded")
     for driver in config["UEFI"]["Drivers"]:
         if driver["Enabled"]:
             require(within(OC / "Drivers", driver["Path"]).is_file(), "Missing UEFI driver")

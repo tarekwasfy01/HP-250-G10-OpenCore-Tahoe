@@ -46,3 +46,20 @@ included components remain as historical attribution.
 - Native cursor trial: local narrowly scoped extension to the documented NootedGreen source lineage; see docs/nootedgreen-cursor-trial.patch. The original NootedGreen license remains applicable.
 
 BrightnessKeys 1.0.3: https://github.com/acidanthera/BrightnessKeys, BSD-3-Clause; handles ACPI brightness notifications.
+
+## HP250Dmic internal microphone (15 November 2026)
+
+HP250Dmic is a local HP 250 G10 Raptor Lake port of
+[TGLDmic](https://github.com/labrouss/TGLDmic), commit
+`d13dafa48fe618db743a0b6fac77ad238fdaf3a1`. The minimal two-channel pipeline is
+adapted from [LatSOFAudio](https://github.com/shubhambanekar/LatSOFAudio), commit
+`41fda77bd5321464fef5ba71a44437f993215d55`. Both BSD-3-Clause copyright/license
+texts are retained under `microphone/licenses/` and in the kext/HAL resources.
+These derivative sources retain those notices, beyond the root MIT documentation
+license. Intel firmware from [sof-bin](https://github.com/thesofproject/sof-bin)
+has its own Intel license, retained beside the firmware and in both bundles.
+
+The microphone .pkg distributes only this CoreAudio HAL plug-in and its notices.
+It contains no Apple-origin graphics drivers, kernel collections, private
+identities or audio recordings. Capture was owner-confirmed on the reference HP;
+other machines and long-term operation are not qualified.

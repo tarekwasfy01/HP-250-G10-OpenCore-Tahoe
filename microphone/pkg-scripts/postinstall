@@ -1,0 +1,5 @@
+#!/bin/bash
+set -euo pipefail
+/usr/bin/codesign --verify --strict /Library/Audio/Plug-Ins/HAL/HP250Dmic.driver
+echo 'HP250Dmic CoreAudio plug-in installed. Restart manually through the matching HP250Dmic-enabled EFI.'
+echo 'No EFI, kernel collections or existing audio/graphics drivers changed. No recording or automatic restart.'
